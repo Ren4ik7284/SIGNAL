@@ -147,7 +147,7 @@ async fn search_music(Query(params): Query<SearchParams>) -> Result<Json<Vec<Sea
     let search_arg = if query.starts_with("http://") || query.starts_with("https://") {
         query.to_string()
     } else {
-        format!("ytsearch10:{}", query)
+        format!("scsearch10:{}", query)
     };
 
     let mut child = match Command::new(&yt_cmd)
@@ -183,6 +183,37 @@ async fn search_music(Query(params): Query<SearchParams>) -> Result<Json<Vec<Sea
     }
 
     let _ = child.wait().await;
+
+    if tracks.is_empty() && !query.starts_with("http://") && !query.starts_with("https://") {
+        let yt_arg = format!("ytsearch10:{}", query);
+        let mut yt_child = match Command::new(&yt_cmd)
+            .args([
+                &yt_arg,
+                "--dump-json",
+                "--flat-playlist",
+                "--no-warnings",
+                "--no-check-certificates",
+            ])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+        {
+            Ok(c) => c,
+            Err(_) => return Ok(Json(tracks)),
+        };
+
+        if let Some(yt_stdout) = yt_child.stdout.take() {
+            let mut yt_reader = tokio::io::BufReader::new(yt_stdout).lines();
+            while let Ok(Some(line)) = yt_reader.next_line().await {
+                if let Ok(item) = serde_json::from_str::<serde_json::Value>(&line) {
+                    if let Some(track) = parse_track_json(&item, &base_url) {
+                        tracks.push(track);
+                    }
+                }
+            }
+        }
+        let _ = yt_child.wait().await;
+    }
 
     Ok(Json(tracks))
 }
@@ -273,28 +304,79 @@ async fn stream_audio(
     }
 
     let yt_cmd = get_yt_dlp_cmd();
+    let mut direct_url = String::new();
 
-    let output = match Command::new(&yt_cmd)
-        .args([
-            "-g",
-            "-f",
-            "ba/b",
-            "--no-warnings",
-            "--no-check-certificates",
-            &target,
-        ])
-        .output()
-        .await
+    if target.ends_with(".mp3")
+        || target.ends_with(".aac")
+        || target.ends_with(".aacp")
+        || target.ends_with(".m3u8")
+        || target.contains("/stream/")
+        || target.contains(":80")
     {
-        Ok(out) => out,
-        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
-    };
+        direct_url = target.clone();
+    } else {
+        let output = Command::new(&yt_cmd)
+            .args([
+                "-g",
+                "-f",
+                "bestaudio/ba/b",
+                "--no-warnings",
+                "--no-check-certificates",
+                &target,
+            ])
+            .output()
+            .await;
 
-    if !output.status.success() {
-        return Err(StatusCode::NOT_FOUND);
+        if let Ok(out) = output {
+            if out.status.success() {
+                let u = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                if !u.is_empty() {
+                    direct_url = u;
+                }
+            }
+        }
+
+        if direct_url.is_empty() {
+            let info_out = Command::new(&yt_cmd)
+                .args([
+                    "--dump-json",
+                    "--flat-playlist",
+                    "--no-warnings",
+                    &target,
+                ])
+                .output()
+                .await;
+
+            if let Ok(iout) = info_out {
+                if let Ok(item) = serde_json::from_slice::<serde_json::Value>(&iout.stdout) {
+                    let title = item["title"].as_str().unwrap_or("");
+                    let uploader = item["uploader"].as_str().unwrap_or("");
+                    let search_query = format!("scsearch1:{} {}", title, uploader);
+
+                    let sc_out = Command::new(&yt_cmd)
+                        .args([
+                            "-g",
+                            "-f",
+                            "bestaudio/b",
+                            "--no-warnings",
+                            &search_query,
+                        ])
+                        .output()
+                        .await;
+
+                    if let Ok(sc) = sc_out {
+                        if sc.status.success() {
+                            let u = String::from_utf8_lossy(&sc.stdout).trim().to_string();
+                            if !u.is_empty() {
+                                direct_url = u;
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
-    let direct_url = String::from_utf8_lossy(&output.stdout).trim().to_string();
     if direct_url.is_empty() {
         return Err(StatusCode::NOT_FOUND);
     }

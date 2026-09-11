@@ -1,10 +1,12 @@
-import { Injectable, signal, computed } from '@angular/core';
+import { Injectable, signal, computed, inject } from '@angular/core';
 import { Track } from '../models/track.model';
+import { LibraryService } from './library.service';
 
 @Injectable({
   providedIn: 'root',
 })
 export class AudioService {
+  private libraryService = inject(LibraryService);
   private audio: HTMLAudioElement;
 
   readonly currentTrack = signal<Track | null>(null);
@@ -116,7 +118,19 @@ export class AudioService {
     const initialDuration = track.duration && track.duration > 0 ? track.duration : 0;
     this.duration.set(initialDuration);
 
-    this.audio.src = track.audioUrl;
+    let playUrl = track.audioUrl;
+    if (playUrl.includes('/api/stream')) {
+      const activeBase = this.libraryService.getBackendUrl();
+      const streamIdx = playUrl.indexOf('/api/stream');
+      if (streamIdx !== -1) {
+        playUrl = activeBase + playUrl.slice(streamIdx);
+      }
+    } else if (typeof window !== 'undefined' && window.location.protocol === 'https:' && playUrl.startsWith('http://')) {
+      const activeBase = this.libraryService.getBackendUrl();
+      playUrl = `${activeBase}/api/stream?url=${encodeURIComponent(playUrl)}`;
+    }
+
+    this.audio.src = playUrl;
     this.audio.load();
 
     this.audio
