@@ -1,0 +1,1122 @@
+<div class="app-layout" (click)="activePlaylistPickerTrackId.set(null)">
+  <!-- Top App Header -->
+  <header class="app-header">
+    <div class="header-left">
+      <div class="brand-badge">
+        <span class="brand-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M2 10v4M6 6v12M10 3v18M14 7v10M18 5v14M22 10v4"/>
+          </svg>
+        </span>
+        <span class="brand-title">SIGNAL</span>
+        <span class="brand-tag font-mono">01.AUDIO</span>
+      </div>
+    </div>
+
+    <!-- Central Instant Search Input -->
+    <div class="header-search">
+      <div class="search-box">
+        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/>
+          <path d="m21 21-4.3-4.3"/>
+        </svg>
+        <input
+          type="text"
+          placeholder="Поиск по медиатеке (Enter: глобальный поиск онлайн)..."
+          [ngModel]="libraryService.searchQuery()"
+          (ngModelChange)="libraryService.searchQuery.set($event)"
+          (keyup.enter)="libraryService.searchQuery() && openOnlineSearchWithQuery(libraryService.searchQuery())"
+          class="search-input"
+        />
+        
+        @if (libraryService.searchQuery()) {
+          <div class="search-actions-group">
+            <button 
+              class="btn-search-online-hint" 
+              (click)="openOnlineSearchWithQuery(libraryService.searchQuery())"
+              title="Искать в глобальной сети через Rust-бэкенд"
+            >
+              Искать онлайн
+            </button>
+            <button class="search-clear-btn" (click)="libraryService.searchQuery.set('')">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+        }
+      </div>
+    </div>
+
+    <!-- Header Actions -->
+    <div class="header-actions">
+      <!-- Backend Status Badge -->
+      <div class="backend-status-pill font-mono" [class.online]="libraryService.isBackendOnline()" title="Статус Rust бэкенда на порту 8085">
+        <span class="backend-dot"></span>
+        <span>{{ libraryService.isBackendOnline() ? 'RUST ENGINE' : 'OFFLINE' }}</span>
+      </div>
+
+      <!-- Add Track / URL Modal Trigger -->
+      <button class="btn-add-track" (click)="isAddModalOpen.set(true)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="12" y1="5" x2="12" y2="19"/>
+          <line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        <span>Добавить музыку</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Workspace (Sidebar + Content View) -->
+  <div class="app-body">
+    <!-- Sleek Left Sidebar -->
+    <aside class="app-sidebar">
+      <div class="sidebar-section">
+        <div class="section-label">ИСТОЧНИКИ</div>
+        <nav class="sidebar-nav">
+          <button 
+            class="nav-item" 
+            [class.active]="activeTab() === 'all'"
+            (click)="setView('all')"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect width="7" height="7" x="3" y="3" rx="1"/>
+              <rect width="7" height="7" x="14" y="3" rx="1"/>
+              <rect width="7" height="7" x="14" y="14" rx="1"/>
+              <rect width="7" height="7" x="3" y="14" rx="1"/>
+            </svg>
+            <span>Вся музыка</span>
+            <span class="count-badge font-mono">{{ libraryService.tracks().length }}</span>
+          </button>
+
+          <button 
+            class="nav-item" 
+            [class.active]="activeTab() === 'streams'"
+            (click)="setView('streams')"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <circle cx="12" cy="12" r="6"/>
+              <circle cx="12" cy="12" r="2"/>
+            </svg>
+            <span>Онлайн-потоки & Радио</span>
+          </button>
+
+          <button 
+            class="nav-item" 
+            [class.active]="activeTab() === 'favorites'"
+            (click)="setView('favorites')"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
+            </svg>
+            <span>Избранное</span>
+          </button>
+
+          <button 
+            class="nav-item" 
+            [class.active]="activeTab() === 'uploads'"
+            (click)="setView('uploads')"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/>
+              <path d="M12 12v9"/>
+              <path d="m16 16-4-4-4 4"/>
+            </svg>
+            <span>Локальные файлы</span>
+          </button>
+        </nav>
+      </div>
+
+      <!-- Playlists Section -->
+      <div class="sidebar-section playlists-section">
+        <div class="section-label-row">
+          <span class="section-label">ПЛЕЙЛИСТЫ</span>
+          <button class="btn-create-pl-mini" (click)="openCreatePlaylistModal()" title="Создать плейлист">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"/>
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+          </button>
+        </div>
+        <div class="playlists-list">
+          @for (pl of libraryService.playlists(); track pl.id) {
+            <div 
+              class="playlist-row" 
+              [class.active]="activeTab() === 'playlist' && libraryService.activePlaylistId() === pl.id"
+              (click)="setView('playlist', pl.id)"
+            >
+              <span class="pl-avatar">{{ pl.coverText }}</span>
+              <div class="pl-meta">
+                <span class="pl-name">{{ pl.title }}</span>
+                <span class="pl-count font-mono">{{ pl.trackIds.length }} трека</span>
+              </div>
+            </div>
+          } @empty {
+            <div class="empty-sidebar-note">Нет плейлистов</div>
+          }
+        </div>
+      </div>
+
+      <!-- Telemetry Footer in Sidebar -->
+      <div class="sidebar-footer">
+        <div class="engine-meta">
+          <div class="engine-title">SIGNAL RUST ENGINE</div>
+          <div class="engine-sub">HTTP 206 Direct Stream Pipeline</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area: TRACKS LIBRARY -->
+    <main class="app-main">
+      <div class="view-container">
+        <!-- Library / Playlist Header Bar -->
+        <div class="view-header">
+          <div>
+            @if (activeTab() === 'playlist' && currentPlaylist(); as pl) {
+              <div class="playlist-header-details">
+                <div class="playlist-badge-avatar">{{ pl.coverText }}</div>
+                <div class="playlist-header-meta">
+                  <div class="playlist-label font-mono">ПОЛЬЗОВАТЕЛЬСКИЙ ПЛЕЙЛИСТ</div>
+                  <h1 class="view-title">{{ pl.title }}</h1>
+                  <p class="view-subtitle">{{ pl.description || 'Плейлист пользователя' }} • {{ pl.trackIds.length }} треков</p>
+                </div>
+                <div class="playlist-header-actions">
+                  <button class="btn-delete-pl" (click)="deleteCurrentPlaylist()" title="Удалить плейлист">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="3 6 5 6 21 6"/>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                    </svg>
+                    <span>Удалить плейлист</span>
+                  </button>
+                </div>
+              </div>
+            } @else {
+              <h1 class="view-title">
+                @if (activeTab() === 'all') { Каталог музыки }
+                @else if (activeTab() === 'streams') { Онлайн-потоки и Live-радио }
+                @else if (activeTab() === 'favorites') { Избранная музыка }
+                @else if (activeTab() === 'uploads') { Локальные файлы }
+                @else { Плейлист }
+              </h1>
+              <p class="view-subtitle">
+                @if (libraryService.filteredTracks().length > 0) {
+                  {{ libraryService.filteredTracks().length }} треков доступно для воспроизведения
+                } @else {
+                  В этом разделе пока нет треков
+                }
+              </p>
+            }
+          </div>
+
+          <!-- Genre Filter Pills -->
+          @if (activeTab() !== 'playlist' && libraryService.availableGenres().length > 1) {
+            <div class="genre-filter-row">
+              @for (g of libraryService.availableGenres(); track g) {
+                <button 
+                  class="genre-chip"
+                  [class.active]="libraryService.selectedGenre() === g"
+                  (click)="selectGenre(g)"
+                >
+                  {{ g === 'all' ? 'Все жанры' : g }}
+                </button>
+              }
+            </div>
+          }
+        </div>
+
+        <!-- Tracks Table or Clean Empty State -->
+        @if (libraryService.filteredTracks().length > 0) {
+          <div class="tracks-table-wrapper">
+            <table class="tracks-table">
+              <thead>
+                <tr>
+                  <th style="width: 48px; text-align: center;">#</th>
+                  <th style="text-align: left;">НАЗВАНИЕ</th>
+                  <th style="text-align: left;">ИСПОЛНИТЕЛЬ / ИСТОЧНИК</th>
+                  <th style="text-align: left;">ЖАНР</th>
+                  <th style="text-align: center;">ФОРМАТ</th>
+                  <th style="text-align: right;">ВРЕМЯ</th>
+                  <th style="width: 120px; text-align: center;">ДЕЙСТВИЯ</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (track of libraryService.filteredTracks(); track track.id; let i = $index) {
+                  <tr 
+                    class="track-row" 
+                    [class.playing]="audioService.currentTrack()?.id === track.id"
+                    [class.has-dropdown]="activePlaylistPickerTrackId() === track.id"
+                    (dblclick)="playTrack(track)"
+                  >
+                    <!-- Play / Index cell -->
+                    <td class="cell-index">
+                      @if (audioService.currentTrack()?.id === track.id && audioService.isPlaying()) {
+                        <div class="audio-bar-anim" (click)="audioService.togglePlay()">
+                          <span></span><span></span><span></span>
+                        </div>
+                      } @else {
+                        <button class="row-play-btn" (click)="playTrack(track)" title="Воспроизвести">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                            <polygon points="6 3 20 12 6 21 6 3"/>
+                          </svg>
+                        </button>
+                        <span class="index-num font-mono">{{ i + 1 }}</span>
+                      }
+                    </td>
+
+                    <!-- Title Cell -->
+                    <td class="cell-title">
+                      <div class="track-title-box">
+                        <span class="track-title-text">{{ track.title }}</span>
+                        @if (track.isLiveStream) {
+                          <span class="badge-tag live-tag">LIVE STREAM</span>
+                        } @else if (track.isLocalUpload) {
+                          <span class="badge-tag">File</span>
+                        } @else if (track.format === 'stream') {
+                          <span class="badge-tag">Stream</span>
+                        }
+                      </div>
+                    </td>
+
+                    <!-- Artist Cell -->
+                    <td class="cell-artist text-secondary">{{ track.artist }}</td>
+
+                    <!-- Genre Cell -->
+                    <td class="cell-genre">
+                      <span class="genre-badge">{{ track.genre }}</span>
+                    </td>
+
+                    <!-- Format & Bitrate Cell -->
+                    <td class="cell-format text-center font-mono text-muted">
+                      {{ track.format | uppercase }} • {{ track.bitrate || 'Stream' }}
+                    </td>
+
+                    <!-- Duration Cell -->
+                    <td class="cell-duration font-mono text-muted text-right">
+                      @if (track.isLiveStream) {
+                        <span class="live-duration-text">LIVE</span>
+                      } @else {
+                        {{ formatTime(track.duration) }}
+                      }
+                    </td>
+
+                    <!-- Actions Cell -->
+                    <td class="cell-actions text-center">
+                      <div class="row-actions-group">
+                        <!-- Favorite Heart -->
+                        <button 
+                          class="action-icon-btn" 
+                          [class.favorited]="track.isFavorite"
+                          (click)="libraryService.toggleFavorite(track.id)"
+                          title="В избранное"
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" [attr.fill]="track.isFavorite ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
+                            <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
+                          </svg>
+                        </button>
+
+                        <!-- Add to Queue -->
+                        <button 
+                          class="action-icon-btn" 
+                          (click)="audioService.addToQueue(track); showToast('Добавлено в очередь')"
+                          title="В очередь"
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19"/>
+                            <line x1="5" y1="12" x2="19" y2="12"/>
+                          </svg>
+                        </button>
+
+                        <!-- Add to Playlist dropdown trigger -->
+                        <div class="playlist-dropdown-wrap" (click)="$event.stopPropagation()">
+                          <button 
+                            class="action-icon-btn" 
+                            [class.active]="activePlaylistPickerTrackId() === track.id"
+                            (click)="activePlaylistPickerTrackId.set(activePlaylistPickerTrackId() === track.id ? null : track.id)"
+                            title="Добавить в плейлист"
+                          >
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                              <line x1="8" y1="6" x2="21" y2="6"/>
+                              <line x1="8" y1="12" x2="21" y2="12"/>
+                              <line x1="8" y1="18" x2="21" y2="18"/>
+                              <line x1="3" y1="6" x2="3.01" y2="6"/>
+                              <line x1="3" y1="12" x2="3.01" y2="12"/>
+                              <line x1="3" y1="18" x2="3.01" y2="18"/>
+                            </svg>
+                          </button>
+
+                          <!-- Minimal Dropdown Menu (Pops Downwards) -->
+                          @if (activePlaylistPickerTrackId() === track.id) {
+                            <div class="playlist-picker-menu">
+                              <div class="picker-header">ПЛЕЙЛИСТЫ:</div>
+                              @for (pl of libraryService.playlists(); track pl.id) {
+                                <button 
+                                  class="picker-item" 
+                                  (click)="toggleTrackInPlaylist(pl, track)"
+                                >
+                                  <span class="picker-check font-mono">
+                                    {{ pl.trackIds.includes(track.id) ? '✓' : '+' }}
+                                  </span>
+                                  <span class="picker-name">{{ pl.title }}</span>
+                                </button>
+                              }
+                              <button 
+                                class="picker-item create-new-pl-btn" 
+                                (click)="openCreatePlaylistModal(); activePlaylistPickerTrackId.set(null)"
+                              >
+                                <span class="picker-check font-mono">+</span>
+                                <span class="picker-name">Создать плейлист...</span>
+                              </button>
+                            </div>
+                          }
+                        </div>
+
+                        <!-- Delete button for custom added tracks -->
+                        @if (track.isLocalUpload || track.format === 'stream' || track.isLiveStream) {
+                          <button 
+                            class="action-icon-btn btn-delete" 
+                            (click)="deleteTrack(track)"
+                            title="Удалить из каталога"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                              <line x1="18" y1="6" x2="6" y2="18"/>
+                              <line x1="6" y1="6" x2="18" y2="18"/>
+                            </svg>
+                          </button>
+                        }
+                      </div>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        } @else {
+          <!-- Sleek Minimalist Empty State -->
+          <div class="empty-state-card">
+            <div class="empty-box-hero">
+              <div class="empty-icon-wrap">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <circle cx="12" cy="12" r="10"/>
+                  <circle cx="12" cy="12" r="3"/>
+                </svg>
+              </div>
+
+              @if (libraryService.tracks().length === 0) {
+                <h3 class="empty-title">Ваша медиатека пуста</h3>
+                <p class="empty-desc">
+                  Используйте глобальный онлайн-поиск (через Rust-бэкенд), подключите прямую ссылку или загрузите файл.
+                </p>
+                <div class="empty-actions-row">
+                  <button class="btn-empty-action" (click)="addModalTab.set('search'); isAddModalOpen.set(true)">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="11" cy="11" r="8"/>
+                      <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                    <span>Найти музыку онлайн</span>
+                  </button>
+                  <button class="btn-empty-secondary" (click)="addModalTab.set('url'); isAddModalOpen.set(true)">
+                    По прямой ссылке
+                  </button>
+                </div>
+              } @else if (activeTab() === 'playlist') {
+                <h3 class="empty-title">В этом плейлисте нет треков</h3>
+                <p class="empty-desc">Перейдите в «Вся музыка» и добавьте нужные треки в этот плейлист.</p>
+                <button class="btn-empty-action" (click)="setView('all')">
+                  Перейти в каталог музыки
+                </button>
+              } @else {
+                <h3 class="empty-title">Ничего не найдено в медиатеке</h3>
+                <p class="empty-desc">Хотите выполнить глобальный поиск по сети?</p>
+                <div class="empty-actions-row">
+                  <button class="btn-empty-action" (click)="openOnlineSearchWithQuery(libraryService.searchQuery())">
+                    Искать «{{ libraryService.searchQuery() }}» онлайн
+                  </button>
+                  <button class="btn-empty-secondary" (click)="libraryService.searchQuery.set(''); libraryService.selectedGenre.set('all')">
+                    Сбросить фильтр
+                  </button>
+                </div>
+              }
+            </div>
+          </div>
+        }
+      </div>
+    </main>
+  </div>
+
+  <!-- DOCKED BOTTOM AUDIO PLAYER -->
+  <footer class="app-player-bar">
+    <!-- Left Column: Current Track Info -->
+    <div class="player-left">
+      <div class="now-playing-cover">
+        @if (audioService.currentTrack()?.coverUrl) {
+          <img [src]="audioService.currentTrack()!.coverUrl" alt="cover" class="cover-img-thumbnail" />
+        } @else {
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M12 8v8M8 12h8"/>
+          </svg>
+        }
+      </div>
+      <div class="now-playing-meta">
+        <div class="meta-title-line">
+          <span class="player-track-title">{{ audioService.currentTrack()?.title || 'Нет активного трека' }}</span>
+          @if (audioService.currentTrack()?.format) {
+            <span class="player-badge-format font-mono">{{ audioService.currentTrack()?.format | uppercase }}</span>
+          }
+        </div>
+        <span class="player-track-artist">{{ audioService.currentTrack()?.artist || 'Выберите трек для воспроизведения' }}</span>
+      </div>
+      @if (audioService.currentTrack()) {
+        <button 
+          class="player-fav-btn" 
+          [class.favorited]="audioService.currentTrack()?.isFavorite"
+          (click)="libraryService.toggleFavorite(audioService.currentTrack()!.id)"
+          title="В избранное (L)"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" [attr.fill]="audioService.currentTrack()?.isFavorite ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
+            <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
+          </svg>
+        </button>
+      }
+    </div>
+
+    <!-- Center Column: Controls and Scrubber -->
+    <div class="player-center">
+      <!-- Buttons Row -->
+      <div class="player-buttons">
+        <!-- Shuffle -->
+        <button 
+          class="ctrl-btn" 
+          [class.active]="audioService.isShuffle()"
+          (click)="audioService.toggleShuffle()"
+          title="Случайный порядок"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="16 3 21 3 21 8"/>
+            <line x1="4" y1="20" x2="21" y2="3"/>
+            <polyline points="21 16 21 21 16 21"/>
+            <line x1="15" y1="15" x2="21" y2="21"/>
+            <line x1="4" y1="4" x2="9" y2="9"/>
+          </svg>
+        </button>
+
+        <!-- Prev -->
+        <button class="ctrl-btn" (click)="audioService.prev()" title="Предыдущий трек">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="19 20 9 12 19 4 19 20"/>
+            <line x1="5" y1="19" x2="5" y2="5"/>
+          </svg>
+        </button>
+
+        <!-- Main Play/Pause Button (High Contrast White Matte) -->
+        <button 
+          class="play-main-btn" 
+          (click)="audioService.togglePlay()"
+          title="Пуск / Пауза (Пробел)"
+        >
+          @if (audioService.isPlaying()) {
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+              <rect width="4" height="16" x="6" y="4" rx="1"/>
+              <rect width="4" height="16" x="14" y="4" rx="1"/>
+            </svg>
+          } @else {
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+              <polygon points="6 3 20 12 6 21 6 3"/>
+            </svg>
+          }
+        </button>
+
+        <!-- Next -->
+        <button class="ctrl-btn" (click)="audioService.next()" title="Следующий трек">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="5 4 15 12 5 20 5 4"/>
+            <line x1="19" y1="5" x2="19" y2="19"/>
+          </svg>
+        </button>
+
+        <!-- Repeat -->
+        <button 
+          class="ctrl-btn" 
+          [class.active]="audioService.repeatMode() !== 'off'"
+          (click)="audioService.cycleRepeat()"
+          [title]="'Повтор: ' + audioService.repeatMode()"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="17 1 21 5 17 9"/>
+            <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+            <polyline points="7 23 3 19 7 15"/>
+            <path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+          </svg>
+          @if (audioService.repeatMode() === 'one') {
+            <span class="repeat-one-badge font-mono">1</span>
+          }
+        </button>
+      </div>
+
+      <!-- Scrubber Row -->
+      <div class="player-scrubber-row">
+        <span class="time-stamp font-mono">
+          @if (audioService.isLiveStream()) {
+            LIVE
+          } @else {
+            {{ formatTime(isScrubbing() ? scrubTime() : audioService.currentTime()) }}
+          }
+        </span>
+        <div class="scrub-slider-container">
+          @if (audioService.isLiveStream()) {
+            <div class="live-stream-bar">
+              <span class="live-pulse-dot"></span>
+              <span class="live-stream-label">НЕПРЕРЫВНЫЙ ОНЛАЙН-ПОТОК • ПРЯМОЙ ЭФИР</span>
+            </div>
+          } @else {
+            <input 
+              type="range"
+              min="0"
+              [max]="audioService.duration() || 100"
+              step="1"
+              [value]="isScrubbing() ? scrubTime() : audioService.currentTime()"
+              (input)="onScrubberInput(+($any($event.target).value))"
+              (change)="onScrubberChange(+($any($event.target).value))"
+              class="mono-slider"
+            />
+          }
+        </div>
+        <span class="time-stamp font-mono">
+          @if (audioService.isLiveStream()) {
+            ∞
+          } @else {
+            {{ formatTime(audioService.duration()) }}
+          }
+        </span>
+      </div>
+    </div>
+
+    <!-- Right Column: Volume and Queue -->
+    <div class="player-right">
+      <!-- Volume Group -->
+      <div class="volume-group">
+        <button class="utility-btn" (click)="audioService.toggleMute()" title="Без звука (M)">
+          @if (audioService.isMuted() || audioService.volume() === 0) {
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+              <line x1="22" y1="9" x2="16" y2="15"/>
+              <line x1="16" y1="9" x2="22" y2="15"/>
+            </svg>
+          } @else if (audioService.volume() < 0.5) {
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+              <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+            </svg>
+          } @else {
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+              <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+            </svg>
+          }
+        </button>
+
+        <div class="vol-slider-wrap">
+          <input 
+            type="range"
+            min="0"
+            max="1"
+            step="0.02"
+            [value]="audioService.isMuted() ? 0 : audioService.volume()"
+            (input)="audioService.setVolume(+($any($event.target).value))"
+            class="mono-slider vol-slider"
+          />
+        </div>
+      </div>
+
+      <!-- Queue Drawer Toggle -->
+      <button 
+        class="utility-btn queue-btn" 
+        [class.active]="isQueueDrawerOpen()"
+        (click)="isQueueDrawerOpen.update(v => !v)"
+        title="Очередь воспроизведения"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="8" y1="6" x2="21" y2="6"/>
+          <line x1="8" y1="12" x2="21" y2="12"/>
+          <line x1="8" y1="18" x2="21" y2="18"/>
+          <line x1="3" y1="6" x2="3.01" y2="6"/>
+          <line x1="3" y1="12" x2="3.01" y2="12"/>
+          <line x1="3" y1="18" x2="3.01" y2="18"/>
+        </svg>
+        <span class="queue-counter font-mono">{{ audioService.queue().length }}</span>
+      </button>
+    </div>
+  </footer>
+
+  <!-- QUEUE SLIDE-OVER DRAWER -->
+  @if (isQueueDrawerOpen()) {
+    <div class="drawer-backdrop" (click)="isQueueDrawerOpen.set(false)">
+      <div class="drawer-panel" (click)="$event.stopPropagation()">
+        <div class="drawer-header">
+          <div>
+            <h3 class="drawer-title">Очередь воспроизведения</h3>
+            <span class="drawer-subtitle font-mono text-muted">{{ audioService.queue().length }} треков в очереди</span>
+          </div>
+          <div class="drawer-actions">
+            <button class="btn-text-sm" (click)="audioService.clearQueue()">Очистить</button>
+            <button class="btn-close-sm" (click)="isQueueDrawerOpen.set(false)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="drawer-body">
+          @for (track of audioService.queue(); track track.id; let i = $index) {
+            <div 
+              class="queue-item" 
+              [class.active]="i === audioService.queueIndex()"
+              (click)="audioService.playTrack(track)"
+            >
+              <span class="queue-idx font-mono">{{ i + 1 }}</span>
+              <div class="queue-item-meta">
+                <span class="q-title">{{ track.title }}</span>
+                <span class="q-artist">{{ track.artist }}</span>
+              </div>
+              <span class="q-duration font-mono text-muted">
+                @if (track.isLiveStream) { LIVE } @else { {{ formatTime(track.duration) }} }
+              </span>
+              <button 
+                class="q-remove-btn" 
+                (click)="$event.stopPropagation(); audioService.removeFromQueue(i)"
+                title="Удалить из очереди"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+          } @empty {
+            <div class="empty-queue">Очередь воспроизведения пуста</div>
+          }
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- ADD TRACK & STREAM MODAL (SEARCH, URL, PRESETS, FILE) -->
+  @if (isAddModalOpen()) {
+    <div class="modal-backdrop" (click)="isAddModalOpen.set(false)">
+      <div class="modal-dialog add-music-dialog" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <div>
+            <h3 class="modal-title">Добавить музыку</h3>
+            <p class="modal-subtitle">Поиск любых треков в сети, прямые ссылки, радио или файлы</p>
+          </div>
+          <button class="btn-close-sm" (click)="isAddModalOpen.set(false)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Modal Nav Tabs -->
+        <div class="modal-nav-tabs">
+          <button 
+            class="modal-tab-btn" 
+            [class.active]="addModalTab() === 'search'"
+            (click)="addModalTab.set('search')"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <span>Поиск онлайн (Rust)</span>
+          </button>
+
+          <button 
+            class="modal-tab-btn" 
+            [class.active]="addModalTab() === 'url'"
+            (click)="addModalTab.set('url')"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+            </svg>
+            <span>По ссылке (Stream URL)</span>
+          </button>
+
+          <button 
+            class="modal-tab-btn" 
+            [class.active]="addModalTab() === 'presets'"
+            (click)="addModalTab.set('presets')"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/>
+              <path d="M2 12h20"/>
+            </svg>
+            <span>Радиостанции</span>
+          </button>
+
+          <button 
+            class="modal-tab-btn" 
+            [class.active]="addModalTab() === 'file'"
+            (click)="addModalTab.set('file')"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            <span>Файл с диска</span>
+          </button>
+        </div>
+
+        <div class="modal-body">
+          <!-- TAB 0: ONLINE SEARCH (POWERED BY RUST AXUM + YT-DLP) -->
+          @if (addModalTab() === 'search') {
+            <div class="tab-online-search">
+              <div class="online-search-bar">
+                <input 
+                  type="text" 
+                  placeholder="Название трека или исполнителя (Miyagi, Linkin Park, Кино...)"
+                  [ngModel]="modalSearchInput()"
+                  (ngModelChange)="modalSearchInput.set($event)"
+                  (keyup.enter)="triggerOnlineSearch()"
+                  class="form-text-input search-hero-input"
+                  autofocus
+                />
+                <button 
+                  class="btn-online-submit" 
+                  [disabled]="!modalSearchInput().trim() || libraryService.isSearchingOnline()"
+                  (click)="triggerOnlineSearch()"
+                >
+                  @if (libraryService.isSearchingOnline()) {
+                    <span class="search-spin-dot"></span>
+                    <span>Поиск...</span>
+                  } @else {
+                    <span>Найти</span>
+                  }
+                </button>
+              </div>
+
+              <!-- Search Results List -->
+              <div class="search-results-box">
+                @if (libraryService.isSearchingOnline()) {
+                  <div class="search-loading-state font-mono">
+                    <span class="loading-pulse"></span> Идет глобальный поиск через Rust Gateway...
+                  </div>
+                } @else if (libraryService.onlineSearchResults().length > 0) {
+                  <div class="search-results-list">
+                    @for (item of libraryService.onlineSearchResults(); track item.id) {
+                      <div class="search-result-row">
+                        <div class="res-cover-wrap">
+                          @if (item.coverUrl) {
+                            <img [src]="item.coverUrl" alt="cover" class="res-img" />
+                          } @else {
+                            <div class="res-cover-placeholder">
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/>
+                              </svg>
+                            </div>
+                          }
+                        </div>
+
+                        <div class="res-meta">
+                          <span class="res-title">{{ item.title }}</span>
+                          <span class="res-artist">{{ item.artist }} • <span class="font-mono text-muted">{{ formatTime(item.duration) }}</span></span>
+                        </div>
+
+                        <div class="res-actions">
+                          <button class="btn-res-play" (click)="playOnlineTrack(item)" title="Слушать прямо сейчас">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                              <polygon points="6 3 20 12 6 21 6 3"/>
+                            </svg>
+                            <span>Слушать</span>
+                          </button>
+                          <button class="btn-res-add" (click)="addOnlineTrackToLib(item)" title="Добавить в библиотеку">
+                            + В медиатеку
+                          </button>
+                        </div>
+                      </div>
+                    }
+                  </div>
+                } @else if (modalSearchInput().trim() && !libraryService.isSearchingOnline()) {
+                  <div class="search-empty-prompt">
+                    Нажмите «Найти» или Enter, чтобы запустить поиск по всей сети.
+                  </div>
+                } @else {
+                  <div class="search-hint-box">
+                    <p class="hint-title">Быстрый поиск без скачивания:</p>
+                    <p class="hint-desc">Бэкенд на Rust на лету находит прямые аудиопотоки и передает их в плеер через HTTP 206 стриминг.</p>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+
+          <!-- TAB 1: ADD BY DIRECT STREAM URL -->
+          @if (addModalTab() === 'url') {
+            <div class="tab-url-content">
+              <div class="input-field">
+                <label class="field-label">Прямая ссылка на аудиопоток (URL)</label>
+                <div class="url-input-wrap">
+                  <input 
+                    type="url" 
+                    placeholder="https://example.com/audio.mp3 или icecast-радио..."
+                    [ngModel]="inputUrl()"
+                    (ngModelChange)="inputUrl.set($event)"
+                    class="form-text-input"
+                  />
+                </div>
+                <span class="field-hint">Стриминг напрямую из сети без скачивания (MP3, AAC, FLAC, WAV, M4A, Icecast)</span>
+              </div>
+
+              <div class="upload-fields-grid">
+                <div class="input-field">
+                  <label class="field-label">Название (опционально)</label>
+                  <input 
+                    type="text" 
+                    placeholder="Определится автоматически из ссылки..."
+                    [ngModel]="inputTitle()"
+                    (ngModelChange)="inputTitle.set($event)"
+                    class="form-text-input"
+                  />
+                </div>
+
+                <div class="input-field">
+                  <label class="field-label">Исполнитель / Станция</label>
+                  <input 
+                    type="text" 
+                    placeholder="Например: Web Stream"
+                    [ngModel]="inputArtist()"
+                    (ngModelChange)="inputArtist.set($event)"
+                    class="form-text-input"
+                  />
+                </div>
+
+                <div class="input-field">
+                  <label class="field-label">Жанр</label>
+                  <input 
+                    type="text" 
+                    placeholder="Жанр..."
+                    [ngModel]="inputGenre()"
+                    (ngModelChange)="inputGenre.set($event)"
+                    class="form-text-input"
+                  />
+                </div>
+              </div>
+
+              <label class="checkbox-label">
+                <input 
+                  type="checkbox" 
+                  [ngModel]="isLiveStreamCheckbox()"
+                  (ngModelChange)="isLiveStreamCheckbox.set($event)"
+                />
+                <span>Это непрерывный прямой эфир (интернет-радио без фиксированной длительности)</span>
+              </label>
+            </div>
+          }
+
+          <!-- TAB 2: PRESET STATIONS -->
+          @if (addModalTab() === 'presets') {
+            <div class="tab-presets-content">
+              <p class="presets-desc">Проверенные 24/7 публичные радиопотоки без рекламы. Нажмите для подключения в библиотеку:</p>
+              <div class="presets-grid">
+                @for (preset of libraryService.presetStreams; track preset.title) {
+                  <div class="preset-card" (click)="addPresetStream(preset)">
+                    <div class="preset-info">
+                      <span class="preset-title">{{ preset.title }}</span>
+                      <span class="preset-genre">{{ preset.genre }}</span>
+                    </div>
+                    <div class="preset-action">
+                      <span class="preset-bitrate font-mono">{{ preset.bitrate }}</span>
+                      <button class="btn-connect-stream" title="Подключить поток">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                          <polygon points="6 3 20 12 6 21 6 3"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+
+          <!-- TAB 3: LOCAL FILE -->
+          @if (addModalTab() === 'file') {
+            <div class="tab-file-content">
+              <div 
+                class="upload-dropzone" 
+                [class.dragging]="isDragging()"
+                (dragover)="onDragOver($event)"
+                (dragleave)="onDragLeave($event)"
+                (drop)="onDrop($event)"
+              >
+                <input 
+                  type="file" 
+                  #fileInput 
+                  accept="audio/*" 
+                  (change)="onFileSelected($event)" 
+                  style="display: none;" 
+                />
+
+                <svg class="dropzone-icon" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="17 8 12 3 7 8"/>
+                  <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
+
+                @if (uploadFileName()) {
+                  <div class="selected-file-pill">
+                    <span class="file-name-text font-mono">{{ uploadFileName() }}</span>
+                    <span class="file-ready-badge">Файл готов</span>
+                  </div>
+                } @else {
+                  <p class="dropzone-prompt">Перетащите аудиофайл сюда или</p>
+                  <button class="btn-browse" (click)="fileInput.click()">Выберите файл на диске</button>
+                }
+              </div>
+
+              <div class="upload-fields-grid" style="margin-top: 14px;">
+                <div class="input-field">
+                  <label class="field-label">Название трека</label>
+                  <input 
+                    type="text" 
+                    placeholder="Название..."
+                    [ngModel]="uploadTitle()"
+                    (ngModelChange)="uploadTitle.set($event)"
+                    class="form-text-input"
+                  />
+                </div>
+
+                <div class="input-field">
+                  <label class="field-label">Исполнитель</label>
+                  <input 
+                    type="text" 
+                    placeholder="Исполнитель..."
+                    [ngModel]="uploadArtist()"
+                    (ngModelChange)="uploadArtist.set($event)"
+                    class="form-text-input"
+                  />
+                </div>
+
+                <div class="input-field">
+                  <label class="field-label">Жанр</label>
+                  <input 
+                    type="text" 
+                    placeholder="Жанр..."
+                    [ngModel]="uploadGenre()"
+                    (ngModelChange)="uploadGenre.set($event)"
+                    class="form-text-input"
+                  />
+                </div>
+              </div>
+            </div>
+          }
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn-cancel" (click)="isAddModalOpen.set(false)">Закрыть</button>
+          
+          @if (addModalTab() === 'url') {
+            <button 
+              class="btn-confirm-action" 
+              [disabled]="!inputUrl() || isUrlValidating()"
+              (click)="submitUrlTrack()"
+            >
+              Подключить поток
+            </button>
+          } @else if (addModalTab() === 'file') {
+            <button 
+              class="btn-confirm-action" 
+              [disabled]="!uploadFile()"
+              (click)="submitUpload()"
+            >
+              Сохранить в библиотеку
+            </button>
+          }
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- CREATE PLAYLIST MODAL -->
+  @if (isPlaylistModalOpen()) {
+    <div class="modal-backdrop" (click)="isPlaylistModalOpen.set(false)">
+      <div class="modal-dialog playlist-modal" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <div>
+            <h3 class="modal-title">Новый плейлист</h3>
+            <p class="modal-subtitle">Создайте подборку для любимых треков и потоков</p>
+          </div>
+          <button class="btn-close-sm" (click)="isPlaylistModalOpen.set(false)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="modal-body">
+          <div class="playlist-create-preview">
+            <div class="preview-badge font-mono">
+              {{ (playlistTitleInput().slice(0, 2) || 'PL') | uppercase }}
+            </div>
+            <div class="preview-info">
+              <span class="preview-name">{{ playlistTitleInput() || 'Название плейлиста' }}</span>
+              <span class="preview-sub font-mono">0 ТРЕКОВ</span>
+            </div>
+          </div>
+
+          <div class="input-field">
+            <label class="field-label">Название плейлиста</label>
+            <input 
+              type="text" 
+              placeholder="Например: Ночной код, Downtempo Focus..."
+              [ngModel]="playlistTitleInput()"
+              (ngModelChange)="playlistTitleInput.set($event)"
+              (keyup.enter)="submitCreatePlaylist()"
+              class="form-text-input"
+              autofocus
+            />
+          </div>
+
+          <div class="input-field">
+            <label class="field-label">Описание (опционально)</label>
+            <input 
+              type="text" 
+              placeholder="Краткое описание назначения плейлиста..."
+              [ngModel]="playlistDescInput()"
+              (ngModelChange)="playlistDescInput.set($event)"
+              (keyup.enter)="submitCreatePlaylist()"
+              class="form-text-input"
+            />
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn-cancel" (click)="isPlaylistModalOpen.set(false)">Отмена</button>
+          <button 
+            class="btn-confirm-action" 
+            [disabled]="!playlistTitleInput().trim()"
+            (click)="submitCreatePlaylist()"
+          >
+            Создать плейлист
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- SYSTEM TOAST NOTIFICATION -->
+  @if (toastMessage()) {
+    <div class="system-toast font-mono">
+      <span class="toast-dot"></span>
+      <span class="toast-content">{{ toastMessage() }}</span>
+    </div>
+  }
+</div>

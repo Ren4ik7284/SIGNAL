@@ -1,0 +1,180 @@
+/* Fonts loaded via <link> in index.html */
+
+:root {
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+
+  --bg-canvas: #09090b;
+  --bg-sidebar: #0f0f12;
+  --bg-panel: #111114;
+  --bg-card: #18181b;
+  --bg-card-hover: #1f1f23;
+  --bg-elevated: #27272a;
+
+  --text-primary: #fafafa;
+  --text-secondary: #a1a1aa;
+  --text-muted: #52525b;
+
+  --border-subtle: #27272a;
+  --border-muted: #3f3f46;
+  --border-focus: #52525b;
+
+  --accent-white: #e4e4e7;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg-canvas);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+app-root {
+  display: block;
+  height: 100%;
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+/* ========== Scrollbar ========== */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--border-subtle);
+  border-radius: 3px;
+
+  &:hover {
+    background-color: var(--border-muted);
+  }
+}
+
+/* ========== Range Slider ========== */
+.mono-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  background: var(--bg-elevated);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+  transition: background 0.15s ease;
+
+  &:hover {
+    background: var(--border-muted);
+  }
+
+  &::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--text-primary);
+    border: none;
+    cursor: pointer;
+    transition: transform 0.1s ease, box-shadow 0.15s ease;
+    box-shadow: 0 0 0 2px var(--bg-panel);
+  }
+
+  &:hover::-webkit-slider-thumb {
+    transform: scale(1.2);
+    box-shadow: 0 0 0 3px var(--bg-panel), 0 0 8px rgba(228, 228, 231, 0.15);
+  }
+
+  &::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--text-primary);
+    border: none;
+    cursor: pointer;
+  }
+
+  &::-moz-range-track {
+    background: var(--bg-elevated);
+    height: 4px;
+    border-radius: 2px;
+  }
+}
+
+.vol-slider {
+  height: 3px;
+
+  &::-webkit-slider-thumb {
+    width: 10px;
+    height: 10px;
+  }
+}
+
+/* ========== Audio Bar Animation ========== */
+.audio-bar-anim {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 2px;
+  height: 16px;
+  cursor: pointer;
+
+  span {
+    display: block;
+    width: 3px;
+    background-color: var(--accent-white);
+    border-radius: 1px;
+    animation: audioBar 0.8s ease-in-out infinite;
+
+    &:nth-child(1) {
+      animation-delay: 0s;
+      height: 8px;
+    }
+    &:nth-child(2) {
+      animation-delay: 0.15s;
+      height: 14px;
+    }
+    &:nth-child(3) {
+      animation-delay: 0.3s;
+      height: 10px;
+    }
+  }
+}
+
+@keyframes audioBar {
+  0%, 100% { height: 4px; }
+  50% { height: 16px; }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}

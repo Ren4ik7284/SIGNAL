@@ -1,0 +1,30 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: music-backend
+    ports:
+      - "8085:8085"
+    environment:
+      - RUST_LOG=info
+    restart: unless-stopped
+    networks:
+      - music-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: music-frontend
+    ports:
+      - "4200:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - music-network
+
+networks:
+  music-network:
+    driver: bridge

@@ -1,0 +1,67 @@
+<header class="app-header">
+  <div class="header-left">
+    <div class="brand-badge">
+      <span class="brand-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M2 10v4M6 6v12M10 3v18M14 7v10M18 5v14M22 10v4"/>
+        </svg>
+      </span>
+      <span class="brand-title">SIGNAL</span>
+      <span class="brand-tag font-mono">01.AUDIO</span>
+    </div>
+  </div>
+
+  <!-- Central Instant Search Input -->
+  <div class="header-search">
+    <div class="search-box">
+      <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"/>
+        <path d="m21 21-4.3-4.3"/>
+      </svg>
+      <input
+        type="text"
+        placeholder="Поиск по медиатеке (Enter: глобальный поиск онлайн)..."
+        [ngModel]="libraryService.searchQuery()"
+        (ngModelChange)="libraryService.searchQuery.set($event)"
+        (keyup.enter)="libraryService.searchQuery() && openOnlineSearch.emit(libraryService.searchQuery())"
+        class="search-input"
+      />
+      
+      @if (libraryService.searchQuery()) {
+        <div class="search-actions-group">
+          <button 
+            class="btn-search-online-hint" 
+            (click)="openOnlineSearch.emit(libraryService.searchQuery())"
+            title="Искать в глобальной сети через Rust-бэкенд"
+          >
+            Искать онлайн
+          </button>
+          <button class="search-clear-btn" (click)="libraryService.searchQuery.set('')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+      }
+    </div>
+  </div>
+
+  <!-- Header Actions -->
+  <div class="header-actions">
+    <!-- Backend Status Badge -->
+    <div class="backend-status-pill font-mono" [class.online]="libraryService.isBackendOnline()" title="Статус Rust бэкенда на порту 8085">
+      <span class="backend-dot"></span>
+      <span>{{ libraryService.isBackendOnline() ? 'RUST ENGINE' : 'OFFLINE' }}</span>
+    </div>
+
+    <!-- Add Track / URL Modal Trigger -->
+    <button class="btn-add-track" (click)="openAddModal.emit()">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="12" y1="5" x2="12" y2="19"/>
+        <line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>
+      <span>Добавить музыку</span>
+    </button>
+  </div>
+</header>

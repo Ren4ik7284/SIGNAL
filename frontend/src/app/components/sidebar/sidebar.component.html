@@ -1,0 +1,96 @@
+<aside class="app-sidebar">
+  <div class="sidebar-section">
+    <div class="section-label">ИСТОЧНИКИ</div>
+    <nav class="sidebar-nav">
+      <button 
+        class="nav-item" 
+        [class.active]="activeTab === 'all'"
+        (click)="viewChange.emit({view: 'all'})"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect width="7" height="7" x="3" y="3" rx="1"/>
+          <rect width="7" height="7" x="14" y="3" rx="1"/>
+          <rect width="7" height="7" x="14" y="14" rx="1"/>
+          <rect width="7" height="7" x="3" y="14" rx="1"/>
+        </svg>
+        <span>Вся музыка</span>
+        <span class="count-badge font-mono">{{ libraryService.tracks().length }}</span>
+      </button>
+
+      <button 
+        class="nav-item" 
+        [class.active]="activeTab === 'streams'"
+        (click)="viewChange.emit({view: 'streams'})"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <circle cx="12" cy="12" r="6"/>
+          <circle cx="12" cy="12" r="2"/>
+        </svg>
+        <span>Онлайн-потоки &amp; Радио</span>
+      </button>
+
+      <button 
+        class="nav-item" 
+        [class.active]="activeTab === 'favorites'"
+        (click)="viewChange.emit({view: 'favorites'})"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
+        </svg>
+        <span>Избранное</span>
+      </button>
+
+      <button 
+        class="nav-item" 
+        [class.active]="activeTab === 'uploads'"
+        (click)="viewChange.emit({view: 'uploads'})"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/>
+          <path d="M12 12v9"/>
+          <path d="m16 16-4-4-4 4"/>
+        </svg>
+        <span>Локальные файлы</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- Playlists Section -->
+  <div class="sidebar-section playlists-section">
+    <div class="section-label-row">
+      <span class="section-label">ПЛЕЙЛИСТЫ</span>
+      <button class="btn-create-pl-mini" (click)="createPlaylist.emit()" title="Создать плейлист">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="12" y1="5" x2="12" y2="19"/>
+          <line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+      </button>
+    </div>
+    <div class="playlists-list">
+      @for (pl of libraryService.playlists(); track pl.id) {
+        <div 
+          class="playlist-row" 
+          [class.active]="activeTab === 'playlist' && libraryService.activePlaylistId() === pl.id"
+          (click)="viewChange.emit({view: 'playlist', playlistId: pl.id})"
+        >
+          <span class="pl-avatar">{{ pl.coverText }}</span>
+          <div class="pl-meta">
+            <span class="pl-name">{{ pl.title }}</span>
+            <span class="pl-count font-mono">{{ pl.trackIds.length }} трека</span>
+          </div>
+        </div>
+      } @empty {
+        <div class="empty-sidebar-note">Нет плейлистов</div>
+      }
+    </div>
+  </div>
+
+  <!-- Telemetry Footer in Sidebar -->
+  <div class="sidebar-footer">
+    <div class="engine-meta">
+      <div class="engine-title">SIGNAL RUST ENGINE</div>
+      <div class="engine-sub">HTTP 206 Direct Stream Pipeline</div>
+    </div>
+  </div>
+</aside>
