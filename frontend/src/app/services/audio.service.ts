@@ -7,7 +7,6 @@ import { Track } from '../models/track.model';
 export class AudioService {
   private audio: HTMLAudioElement;
 
-  // Reactive State Signals
   readonly currentTrack = signal<Track | null>(null);
   readonly isPlaying = signal<boolean>(false);
   readonly currentTime = signal<number>(0);
@@ -22,7 +21,6 @@ export class AudioService {
 
   private isHandlingEnd = false;
 
-  // Computed properties
   readonly progressPercent = computed(() => {
     const d = this.duration();
     if (!d || d <= 0 || !isFinite(d)) return 0;
@@ -32,10 +30,8 @@ export class AudioService {
   readonly isLiveStream = computed(() => {
     const track = this.currentTrack();
     if (!track) return false;
-    // Explicit 24/7 radio stations
     if (track.isLiveStream) return true;
     const d = this.duration();
-    // If track or audio element has finite duration, it is a normal seekable track
     if ((track.duration && track.duration > 0) || (d > 0 && isFinite(d))) {
       return false;
     }
@@ -159,7 +155,6 @@ export class AudioService {
     const track = this.currentTrack();
     if (!track) return;
 
-    // Check if this is our stream endpoint (supports fast server-side &ss= parameter)
     if (track.audioUrl.includes('/api/stream')) {
       const baseUrl = track.audioUrl.split('&ss=')[0];
       const ssParam = clamped > 0 ? `&ss=${Math.round(clamped)}` : '';
@@ -175,7 +170,6 @@ export class AudioService {
         .then(() => this.isPlaying.set(true))
         .catch(() => {});
     } else {
-      // Local file or standard static stream with byte-range support
       try {
         this.audio.currentTime = clamped;
         this.currentTime.set(clamped);

@@ -9,9 +9,6 @@
   position: relative;
 }
 
-/* ==========================================================================
-   TOP HEADER
-   ========================================================================== */
 .app-header {
   height: 56px;
   min-height: 56px;
@@ -197,9 +194,6 @@
   }
 }
 
-/* ==========================================================================
-   APP BODY (SIDEBAR + MAIN)
-   ========================================================================== */
 .app-body {
   display: flex;
   flex: 1;
@@ -207,7 +201,6 @@
   overflow: hidden;
 }
 
-/* Sidebar */
 .app-sidebar {
   width: 230px;
   min-width: 230px;
@@ -358,7 +351,6 @@
   }
 }
 
-/* Main Content Area */
 .app-main {
   flex: 1;
   background-color: var(--bg-canvas);
@@ -366,9 +358,6 @@
   padding: 24px 32px;
 }
 
-/* ==========================================================================
-   VIEW: TRACKS LIBRARY
-   ========================================================================== */
 .view-container {
   display: flex;
   flex-direction: column;
@@ -623,9 +612,6 @@
   }
 }
 
-/* ==========================================================================
-   DOCKED BOTTOM PLAYER
-   ========================================================================== */
 .app-player-bar {
   height: 72px;
   min-height: 72px;
@@ -891,9 +877,6 @@
   }
 }
 
-/* ==========================================================================
-   QUEUE SLIDE-OVER DRAWER
-   ========================================================================== */
 .drawer-backdrop {
   position: fixed;
   inset: 0;
@@ -1038,9 +1021,6 @@
   }
 }
 
-/* ==========================================================================
-   MULTI-TAB ADD TRACK & STREAM MODAL
-   ========================================================================== */
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -1591,9 +1571,6 @@
   }
 }
 
-/* ==========================================================================
-   SYSTEM TOAST
-   ========================================================================== */
 .system-toast {
   position: fixed;
   bottom: 84px;
@@ -1624,15 +1601,11 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Utilities */
 .text-center { text-align: center; }
 .text-right { text-align: right; }
 .text-secondary { color: var(--text-secondary); }
 .text-muted { color: var(--text-muted); }
 
-/* ==========================================================================
-   EMPTY STATE HERO & PLAYLIST ACTIONS
-   ========================================================================== */
 .section-label-row {
   display: flex;
   align-items: center;
@@ -1756,9 +1729,6 @@
   }
 }
 
-/* ==========================================================================
-   PLAYLIST HEADER, PICKER MENU & MODAL
-   ========================================================================== */
 .playlist-header-details {
   display: flex;
   align-items: center;
@@ -1952,6 +1922,261 @@
         color: var(--text-muted);
         margin-top: 2px;
       }
+    }
+  }
+}
+
+@media (max-width: 768px) {
+  .app-header {
+    padding: 0 12px;
+    gap: 8px;
+
+    .header-left {
+      min-width: auto;
+      .brand-badge .brand-tag { display: none; }
+    }
+
+    .header-search .search-box {
+      .search-input {
+        font-size: 14px;
+        padding-left: 32px;
+        &::placeholder { font-size: 12px; }
+      }
+      .search-actions-group .btn-search-online-hint { display: none; }
+    }
+
+    .header-actions {
+      .backend-status-pill { display: none; }
+      .btn-add-track {
+        padding: 7px 10px;
+        span { display: none; }
+      }
+    }
+  }
+
+  .app-body {
+    height: calc(100vh - 56px - 120px);
+  }
+
+  .app-sidebar {
+    display: none;
+  }
+
+  .app-main {
+    padding: 14px 10px;
+  }
+
+  .view-container {
+    gap: 14px;
+
+    .view-header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 8px;
+      padding-bottom: 10px;
+
+      .view-title { font-size: 18px; }
+      .view-subtitle { font-size: 12px; }
+
+      .genre-filter-row {
+        overflow-x: auto;
+        flex-wrap: nowrap;
+        padding-bottom: 4px;
+        -webkit-overflow-scrolling: touch;
+        width: 100%;
+        .genre-chip {
+          white-space: nowrap;
+          flex-shrink: 0;
+          padding: 4px 10px;
+          font-size: 11px;
+        }
+      }
+    }
+
+    .tracks-table-wrapper .tracks-table {
+      font-size: 12px;
+
+      thead th {
+        padding: 8px 6px;
+        font-size: 10px;
+      }
+
+      tbody tr.track-row td {
+        padding: 8px 6px;
+      }
+
+      .cell-genre,
+      .cell-format {
+        display: none;
+      }
+
+      .cell-artist {
+        max-width: 70px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 11px;
+      }
+
+      .cell-title .track-title-box .track-title-text {
+        font-size: 12px;
+      }
+
+      .cell-actions .row-actions-group {
+        gap: 2px;
+        .playlist-dropdown-wrap { display: none; }
+      }
+    }
+  }
+
+  .app-player-bar {
+    height: auto;
+    min-height: 120px;
+    flex-wrap: wrap;
+    padding: 8px 12px 12px;
+    gap: 6px;
+
+    .player-left {
+      min-width: 0;
+      max-width: none;
+      width: 100%;
+      order: 1;
+
+      .now-playing-cover {
+        width: 36px;
+        height: 36px;
+        min-width: 36px;
+        min-height: 36px;
+        max-width: 36px;
+        max-height: 36px;
+      }
+
+      .now-playing-meta {
+        flex: 1;
+        min-width: 0;
+
+        .meta-title-line .player-track-title { font-size: 12px; }
+        .player-track-artist { font-size: 11px; }
+      }
+    }
+
+    .player-center {
+      width: 100%;
+      max-width: none;
+      order: 2;
+      gap: 4px;
+
+      .player-buttons { gap: 14px; }
+      .player-scrubber-row { gap: 6px; }
+    }
+
+    .player-right {
+      display: none;
+    }
+  }
+
+  .drawer-backdrop .drawer-panel {
+    width: 100%;
+  }
+
+  .modal-backdrop {
+    padding: 0;
+    align-items: flex-end;
+
+    .modal-dialog {
+      max-width: 100%;
+      max-height: 90vh;
+      border-radius: 14px 14px 0 0;
+
+      .modal-header {
+        padding: 16px;
+        .modal-title { font-size: 15px; }
+        .modal-subtitle { font-size: 11px; }
+      }
+
+      .modal-nav-tabs .modal-tab-btn {
+        padding: 8px 4px;
+        font-size: 11px;
+        gap: 4px;
+        svg { display: none; }
+      }
+
+      .modal-body {
+        padding: 12px;
+        max-height: 55vh;
+        overflow-y: auto;
+
+        .tab-online-search .online-search-bar {
+          flex-direction: column;
+          gap: 6px;
+
+          .btn-online-submit {
+            width: 100%;
+            justify-content: center;
+            padding: 10px;
+          }
+        }
+
+        .search-results-box {
+          max-height: 280px;
+
+          .search-result-row {
+            gap: 8px;
+            padding: 8px;
+
+            .res-cover-wrap {
+              width: 36px;
+              height: 36px;
+            }
+
+            .res-meta .res-title { font-size: 12px; }
+
+            .res-actions {
+              flex-direction: column;
+              gap: 3px;
+              .btn-res-play,
+              .btn-res-add {
+                font-size: 10px;
+                padding: 5px 8px;
+              }
+            }
+          }
+        }
+      }
+
+      .modal-footer {
+        padding: 12px 16px;
+      }
+    }
+  }
+
+  .playlist-header-details {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+
+    .playlist-badge-avatar {
+      width: 40px;
+      height: 40px;
+      font-size: 14px;
+    }
+  }
+
+  .system-toast {
+    bottom: 130px;
+    right: 10px;
+    left: 10px;
+  }
+
+  .empty-state-card {
+    min-height: 220px;
+    padding: 20px 14px;
+
+    .empty-box-hero {
+      .empty-icon-wrap { width: 48px; height: 48px; }
+      .empty-title { font-size: 15px; }
+      .empty-desc { font-size: 12px; }
+      .empty-actions-row { flex-direction: column; gap: 8px; }
     }
   }
 }

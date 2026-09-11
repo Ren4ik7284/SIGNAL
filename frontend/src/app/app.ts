@@ -23,7 +23,6 @@ export class App implements OnInit {
   readonly audioService = inject(AudioService);
   readonly libraryService = inject(LibraryService);
 
-  // UI State Signals
   readonly isAddModalOpen = signal<boolean>(false);
   readonly addModalTab = signal<'search' | 'url' | 'presets' | 'file'>('search');
   readonly isPlaylistModalOpen = signal<boolean>(false);
@@ -31,20 +30,16 @@ export class App implements OnInit {
   readonly activeTab = signal<'all' | 'favorites' | 'uploads' | 'streams' | 'playlist'>('all');
   readonly toastMessage = signal<string | null>(null);
 
-  // Online Search in Modal
   readonly modalSearchInput = signal<string>('');
 
-  // Active playlist details computed
   readonly currentPlaylist = computed(() => {
     const id = this.libraryService.activePlaylistId();
     if (!id) return null;
     return this.libraryService.playlists().find((p) => p.id === id) || null;
   });
 
-  // Track Playlist Picker Menu
   readonly activePlaylistPickerTrackId = signal<string | null>(null);
 
-  // Add Stream by URL Form State
   readonly inputUrl = signal<string>('');
   readonly inputTitle = signal<string>('');
   readonly inputArtist = signal<string>('');
@@ -52,7 +47,6 @@ export class App implements OnInit {
   readonly isLiveStreamCheckbox = signal<boolean>(false);
   readonly isUrlValidating = signal<boolean>(false);
 
-  // Local File Upload Form State
   readonly uploadFile = signal<File | null>(null);
   readonly uploadFileName = signal<string>('');
   readonly uploadTitle = signal<string>('');
@@ -60,11 +54,9 @@ export class App implements OnInit {
   readonly uploadGenre = signal<string>('Electronic');
   readonly isDragging = signal<boolean>(false);
 
-  // Create Playlist Modal State
   readonly playlistTitleInput = signal<string>('');
   readonly playlistDescInput = signal<string>('');
 
-  // Scrubber Dragging State
   readonly isScrubbing = signal<boolean>(false);
   readonly scrubTime = signal<number>(0);
 
@@ -78,7 +70,6 @@ export class App implements OnInit {
     this.audioService.seek(val);
   }
 
-  // Formatted Time Helper
   formatTime(seconds: number): string {
     if (isNaN(seconds) || seconds < 0 || !isFinite(seconds)) return '0:00';
     const mins = Math.floor(seconds / 60);
@@ -90,7 +81,6 @@ export class App implements OnInit {
     this.libraryService.checkBackendHealth();
   }
 
-  // Keyboard Shortcuts
   @HostListener('window:keydown', ['$event'])
   handleKeyboardEvent(event: KeyboardEvent) {
     const target = event.target as HTMLElement;
@@ -138,7 +128,6 @@ export class App implements OnInit {
     }, 3000);
   }
 
-  // Navigation
   setView(view: 'all' | 'favorites' | 'uploads' | 'streams' | 'playlist', playlistId?: string) {
     this.activeTab.set(view);
     this.libraryService.selectedView.set(view);
@@ -162,7 +151,6 @@ export class App implements OnInit {
     this.showToast(`Трек "${track.title}" удален`);
   }
 
-  // Online Search Handlers (Rust Gateway)
   async triggerOnlineSearch() {
     const q = this.modalSearchInput().trim();
     if (!q) return;
@@ -187,7 +175,6 @@ export class App implements OnInit {
     this.showToast(`Трек "${track.title}" сохранен в медиатеку`);
   }
 
-  // Playlist Management Modal
   openCreatePlaylistModal() {
     this.playlistTitleInput.set('');
     this.playlistDescInput.set('');
@@ -222,7 +209,6 @@ export class App implements OnInit {
     this.activePlaylistPickerTrackId.set(null);
   }
 
-  // URL Stream Add
   async submitUrlTrack() {
     const url = this.inputUrl().trim();
     if (!url) return;
@@ -251,7 +237,6 @@ export class App implements OnInit {
     }
   }
 
-  // Preset Radio Add
   async addPresetStream(preset: { title: string; artist: string; genre: string; url: string; bitrate: string }) {
     const track = await this.libraryService.addStreamTrack(
       preset.url,
@@ -265,7 +250,6 @@ export class App implements OnInit {
     this.audioService.playTrack(track, this.libraryService.tracks());
   }
 
-  // Local File Upload
   onFileSelected(event: Event) {
     const input = event.target as HTMLInputElement;
     if (input.files && input.files.length > 0) {

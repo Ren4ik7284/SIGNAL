@@ -5,7 +5,7 @@ import { Track, Playlist } from '../models/track.model';
   providedIn: 'root',
 })
 export class LibraryService {
-  private readonly BACKEND_URL = 'http://localhost:8085';
+  private readonly BACKEND_URL = 'https://signal-audio-backend-production.up.railway.app';
   private readonly STORAGE_KEY_TRACKS = 'signal_music_user_tracks';
   private readonly STORAGE_KEY_FAVORITES = 'signal_music_favorites';
   private readonly STORAGE_KEY_PLAYLISTS = 'signal_music_playlists';
@@ -41,7 +41,6 @@ export class LibraryService {
     },
   ];
 
-  // State Signals
   readonly tracks = signal<Track[]>([]);
   readonly playlists = signal<Playlist[]>([]);
   readonly searchQuery = signal<string>('');
@@ -49,18 +48,15 @@ export class LibraryService {
   readonly selectedView = signal<'all' | 'favorites' | 'uploads' | 'streams' | 'playlist'>('all');
   readonly activePlaylistId = signal<string | null>(null);
 
-  // Online Search (via Rust Axum + yt-dlp backend)
   readonly onlineSearchResults = signal<Track[]>([]);
   readonly isSearchingOnline = signal<boolean>(false);
   readonly isBackendOnline = signal<boolean>(false);
 
-  // Available Genres
   readonly availableGenres = computed(() => {
     const all = this.tracks().map((t) => t.genre).filter(Boolean);
     return ['all', ...Array.from(new Set(all))];
   });
 
-  // Filtered tracks
   readonly filteredTracks = computed(() => {
     const query = this.searchQuery().trim().toLowerCase();
     const genre = this.selectedGenre();
@@ -145,7 +141,6 @@ export class LibraryService {
     }
   }
 
-  // Search Online Music via Rust Backend
   async searchOnline(query: string): Promise<Track[]> {
     const q = query.trim();
     if (!q) {

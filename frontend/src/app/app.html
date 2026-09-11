@@ -1,5 +1,5 @@
 <div class="app-layout" (click)="activePlaylistPickerTrackId.set(null)">
-  <!-- Top App Header -->
+  
   <header class="app-header">
     <div class="header-left">
       <div class="brand-badge">
@@ -13,7 +13,7 @@
       </div>
     </div>
 
-    <!-- Central Instant Search Input -->
+    
     <div class="header-search">
       <div class="search-box">
         <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -49,15 +49,15 @@
       </div>
     </div>
 
-    <!-- Header Actions -->
+    
     <div class="header-actions">
-      <!-- Backend Status Badge -->
+      
       <div class="backend-status-pill font-mono" [class.online]="libraryService.isBackendOnline()" title="Статус Rust бэкенда на порту 8085">
         <span class="backend-dot"></span>
         <span>{{ libraryService.isBackendOnline() ? 'RUST ENGINE' : 'OFFLINE' }}</span>
       </div>
 
-      <!-- Add Track / URL Modal Trigger -->
+      
       <button class="btn-add-track" (click)="isAddModalOpen.set(true)">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <line x1="12" y1="5" x2="12" y2="19"/>
@@ -68,9 +68,9 @@
     </div>
   </header>
 
-  <!-- Main Workspace (Sidebar + Content View) -->
+  
   <div class="app-body">
-    <!-- Sleek Left Sidebar -->
+    
     <aside class="app-sidebar">
       <div class="sidebar-section">
         <div class="section-label">ИСТОЧНИКИ</div>
@@ -129,7 +129,7 @@
         </nav>
       </div>
 
-      <!-- Playlists Section -->
+      
       <div class="sidebar-section playlists-section">
         <div class="section-label-row">
           <span class="section-label">ПЛЕЙЛИСТЫ</span>
@@ -159,7 +159,7 @@
         </div>
       </div>
 
-      <!-- Telemetry Footer in Sidebar -->
+      
       <div class="sidebar-footer">
         <div class="engine-meta">
           <div class="engine-title">SIGNAL RUST ENGINE</div>
@@ -168,10 +168,10 @@
       </div>
     </aside>
 
-    <!-- Main Content Area: TRACKS LIBRARY -->
+    
     <main class="app-main">
       <div class="view-container">
-        <!-- Library / Playlist Header Bar -->
+        
         <div class="view-header">
           <div>
             @if (activeTab() === 'playlist' && currentPlaylist(); as pl) {
@@ -210,7 +210,7 @@
             }
           </div>
 
-          <!-- Genre Filter Pills -->
+          
           @if (activeTab() !== 'playlist' && libraryService.availableGenres().length > 1) {
             <div class="genre-filter-row">
               @for (g of libraryService.availableGenres(); track g) {
@@ -226,7 +226,7 @@
           }
         </div>
 
-        <!-- Tracks Table or Clean Empty State -->
+        
         @if (libraryService.filteredTracks().length > 0) {
           <div class="tracks-table-wrapper">
             <table class="tracks-table">
@@ -249,7 +249,7 @@
                     [class.has-dropdown]="activePlaylistPickerTrackId() === track.id"
                     (dblclick)="playTrack(track)"
                   >
-                    <!-- Play / Index cell -->
+                    
                     <td class="cell-index">
                       @if (audioService.currentTrack()?.id === track.id && audioService.isPlaying()) {
                         <div class="audio-bar-anim" (click)="audioService.togglePlay()">
@@ -265,7 +265,7 @@
                       }
                     </td>
 
-                    <!-- Title Cell -->
+                    
                     <td class="cell-title">
                       <div class="track-title-box">
                         <span class="track-title-text">{{ track.title }}</span>
@@ -279,20 +279,20 @@
                       </div>
                     </td>
 
-                    <!-- Artist Cell -->
+                    
                     <td class="cell-artist text-secondary">{{ track.artist }}</td>
 
-                    <!-- Genre Cell -->
+                    
                     <td class="cell-genre">
                       <span class="genre-badge">{{ track.genre }}</span>
                     </td>
 
-                    <!-- Format & Bitrate Cell -->
+                    
                     <td class="cell-format text-center font-mono text-muted">
                       {{ track.format | uppercase }} • {{ track.bitrate || 'Stream' }}
                     </td>
 
-                    <!-- Duration Cell -->
+                    
                     <td class="cell-duration font-mono text-muted text-right">
                       @if (track.isLiveStream) {
                         <span class="live-duration-text">LIVE</span>
@@ -301,10 +301,10 @@
                       }
                     </td>
 
-                    <!-- Actions Cell -->
+                    
                     <td class="cell-actions text-center">
                       <div class="row-actions-group">
-                        <!-- Favorite Heart -->
+                        
                         <button 
                           class="action-icon-btn" 
                           [class.favorited]="track.isFavorite"
@@ -316,7 +316,7 @@
                           </svg>
                         </button>
 
-                        <!-- Add to Queue -->
+                        
                         <button 
                           class="action-icon-btn" 
                           (click)="audioService.addToQueue(track); showToast('Добавлено в очередь')"
@@ -328,7 +328,7 @@
                           </svg>
                         </button>
 
-                        <!-- Add to Playlist dropdown trigger -->
+                        
                         <div class="playlist-dropdown-wrap" (click)="$event.stopPropagation()">
                           <button 
                             class="action-icon-btn" 
@@ -346,7 +346,7 @@
                             </svg>
                           </button>
 
-                          <!-- Minimal Dropdown Menu (Pops Downwards) -->
+                          
                           @if (activePlaylistPickerTrackId() === track.id) {
                             <div class="playlist-picker-menu">
                               <div class="picker-header">ПЛЕЙЛИСТЫ:</div>
@@ -372,7 +372,7 @@
                           }
                         </div>
 
-                        <!-- Delete button for custom added tracks -->
+                        
                         @if (track.isLocalUpload || track.format === 'stream' || track.isLiveStream) {
                           <button 
                             class="action-icon-btn btn-delete" 
@@ -393,7 +393,7 @@
             </table>
           </div>
         } @else {
-          <!-- Sleek Minimalist Empty State -->
+          
           <div class="empty-state-card">
             <div class="empty-box-hero">
               <div class="empty-icon-wrap">
@@ -445,9 +445,9 @@
     </main>
   </div>
 
-  <!-- DOCKED BOTTOM AUDIO PLAYER -->
+  
   <footer class="app-player-bar">
-    <!-- Left Column: Current Track Info -->
+    
     <div class="player-left">
       <div class="now-playing-cover">
         @if (audioService.currentTrack()?.coverUrl) {
@@ -482,11 +482,11 @@
       }
     </div>
 
-    <!-- Center Column: Controls and Scrubber -->
+    
     <div class="player-center">
-      <!-- Buttons Row -->
+      
       <div class="player-buttons">
-        <!-- Shuffle -->
+        
         <button 
           class="ctrl-btn" 
           [class.active]="audioService.isShuffle()"
@@ -502,7 +502,7 @@
           </svg>
         </button>
 
-        <!-- Prev -->
+        
         <button class="ctrl-btn" (click)="audioService.prev()" title="Предыдущий трек">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polygon points="19 20 9 12 19 4 19 20"/>
@@ -510,7 +510,7 @@
           </svg>
         </button>
 
-        <!-- Main Play/Pause Button (High Contrast White Matte) -->
+        
         <button 
           class="play-main-btn" 
           (click)="audioService.togglePlay()"
@@ -528,7 +528,7 @@
           }
         </button>
 
-        <!-- Next -->
+        
         <button class="ctrl-btn" (click)="audioService.next()" title="Следующий трек">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polygon points="5 4 15 12 5 20 5 4"/>
@@ -536,7 +536,7 @@
           </svg>
         </button>
 
-        <!-- Repeat -->
+        
         <button 
           class="ctrl-btn" 
           [class.active]="audioService.repeatMode() !== 'off'"
@@ -555,7 +555,7 @@
         </button>
       </div>
 
-      <!-- Scrubber Row -->
+      
       <div class="player-scrubber-row">
         <span class="time-stamp font-mono">
           @if (audioService.isLiveStream()) {
@@ -593,9 +593,9 @@
       </div>
     </div>
 
-    <!-- Right Column: Volume and Queue -->
+    
     <div class="player-right">
-      <!-- Volume Group -->
+      
       <div class="volume-group">
         <button class="utility-btn" (click)="audioService.toggleMute()" title="Без звука (M)">
           @if (audioService.isMuted() || audioService.volume() === 0) {
@@ -631,7 +631,7 @@
         </div>
       </div>
 
-      <!-- Queue Drawer Toggle -->
+      
       <button 
         class="utility-btn queue-btn" 
         [class.active]="isQueueDrawerOpen()"
@@ -651,7 +651,7 @@
     </div>
   </footer>
 
-  <!-- QUEUE SLIDE-OVER DRAWER -->
+  
   @if (isQueueDrawerOpen()) {
     <div class="drawer-backdrop" (click)="isQueueDrawerOpen.set(false)">
       <div class="drawer-panel" (click)="$event.stopPropagation()">
@@ -705,7 +705,7 @@
     </div>
   }
 
-  <!-- ADD TRACK & STREAM MODAL (SEARCH, URL, PRESETS, FILE) -->
+  
   @if (isAddModalOpen()) {
     <div class="modal-backdrop" (click)="isAddModalOpen.set(false)">
       <div class="modal-dialog add-music-dialog" (click)="$event.stopPropagation()">
@@ -722,7 +722,7 @@
           </button>
         </div>
 
-        <!-- Modal Nav Tabs -->
+        
         <div class="modal-nav-tabs">
           <button 
             class="modal-tab-btn" 
@@ -776,7 +776,7 @@
         </div>
 
         <div class="modal-body">
-          <!-- TAB 0: ONLINE SEARCH (POWERED BY RUST AXUM + YT-DLP) -->
+          
           @if (addModalTab() === 'search') {
             <div class="tab-online-search">
               <div class="online-search-bar">
@@ -803,7 +803,7 @@
                 </button>
               </div>
 
-              <!-- Search Results List -->
+              
               <div class="search-results-box">
                 @if (libraryService.isSearchingOnline()) {
                   <div class="search-loading-state font-mono">
@@ -858,7 +858,7 @@
             </div>
           }
 
-          <!-- TAB 1: ADD BY DIRECT STREAM URL -->
+          
           @if (addModalTab() === 'url') {
             <div class="tab-url-content">
               <div class="input-field">
@@ -921,7 +921,7 @@
             </div>
           }
 
-          <!-- TAB 2: PRESET STATIONS -->
+          
           @if (addModalTab() === 'presets') {
             <div class="tab-presets-content">
               <p class="presets-desc">Проверенные 24/7 публичные радиопотоки без рекламы. Нажмите для подключения в библиотеку:</p>
@@ -946,7 +946,7 @@
             </div>
           }
 
-          <!-- TAB 3: LOCAL FILE -->
+          
           @if (addModalTab() === 'file') {
             <div class="tab-file-content">
               <div 
@@ -1044,7 +1044,7 @@
     </div>
   }
 
-  <!-- CREATE PLAYLIST MODAL -->
+  
   @if (isPlaylistModalOpen()) {
     <div class="modal-backdrop" (click)="isPlaylistModalOpen.set(false)">
       <div class="modal-dialog playlist-modal" (click)="$event.stopPropagation()">
@@ -1112,7 +1112,7 @@
     </div>
   }
 
-  <!-- SYSTEM TOAST NOTIFICATION -->
+  
   @if (toastMessage()) {
     <div class="system-toast font-mono">
       <span class="toast-dot"></span>
