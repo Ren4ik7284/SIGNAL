@@ -13,6 +13,7 @@ export class LibraryService {
   private readonly STORAGE_KEY_FAVORITES = 'signal_music_favorites';
   private readonly STORAGE_KEY_PLAYLISTS = 'signal_music_playlists';
   private readonly STORAGE_KEY_STATIONS = 'signal_music_radio_stations';
+  private readonly STORAGE_KEY_UPDATED_AT = 'signal_music_updated_at';
 
   readonly defaultRadioStations: RadioStation[] = [
     {
@@ -148,9 +149,14 @@ export class LibraryService {
     });
   });
 
+  readonly isCloudSynced = signal<boolean>(false);
+  private syncTimeout: any = null;
+
   constructor() {
     this.initLibrary();
-    this.checkBackendHealth();
+    this.checkBackendHealth().then(() => {
+      this.syncWithBackendOnStartup();
+    });
   }
 
   getBackendUrl(): string {
@@ -330,6 +336,22 @@ export class LibraryService {
     return playlist;
   }
 
+  private getLocalUpdatedAt(): number {
+    try {
+      const v = localStorage.getItem(this.STORAGE_KEY_UPDATED_AT);
+      return v ? parseInt(v, 10) || 0 : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  private markUpdated() {
+    try {
+      localStorage.setItem(this.STORAGE_KEY_UPDATED_AT, Date.now().toString());
+    } catch {}
+    this.scheduleCloudSync();
+  }
+
   private persistTracks() {
     const persistable = this.tracks().filter((t) => !t.audioUrl.startsWith('blob:'));
     try {
@@ -337,6 +359,7 @@ export class LibraryService {
     } catch (e) {
       console.warn('Failed to save tracks to localStorage:', e);
     }
+    this.markUpdated();
   }
 
   private persistPlaylists() {
@@ -345,6 +368,7 @@ export class LibraryService {
     } catch (e) {
       console.warn('Failed to save playlists to localStorage:', e);
     }
+    this.markUpdated();
   }
 
   private persistStations() {
@@ -352,6 +376,108 @@ export class LibraryService {
       localStorage.setItem(this.STORAGE_KEY_STATIONS, JSON.stringify(this.radioStations()));
     } catch (e) {
       console.warn('Failed to save stations to localStorage:', e);
+    }
+    this.markUpdated();
+  }
+
+  private saveLocalWithoutCloudSync() {
+    const persistable = this.tracks().filter((t) => !t.audioUrl.startsWith('blob:'));
+    try {
+      localStorage.setItem(this.STORAGE_KEY_TRACKS, JSON.stringify(persistable));
+      localStorage.setItem(this.STORAGE_KEY_PLAYLISTS, JSON.stringify(this.playlists()));
+      localStorage.setItem(this.STORAGE_KEY_STATIONS, JSON.stringify(this.radioStations()));
+      const favs = persistable.filter((t) => t.isFavorite).map((t) => t.id);
+      localStorage.setItem(this.STORAGE_KEY_FAVORITES, JSON.stringify(favs));
+    } catch (e) {
+      console.warn('Local save error:', e);
+    }
+  }
+
+  scheduleCloudSync() {
+    this.isCloudSynced.set(false);
+    if (this.syncTimeout) {
+      clearTimeout(this.syncTimeout);
+    }
+    this.syncTimeout = setTimeout(() => {
+      this.pushLibraryToBackend();
+    }, 1500);
+  }
+
+  async pushLibraryToBackend() {
+    if (!this.isBackendOnline()) return;
+    try {
+      const updatedAt = Date.now();
+      try {
+        localStorage.setItem(this.STORAGE_KEY_UPDATED_AT, updatedAt.toString());
+      } catch {}
+
+      const payload = {
+        updated_at: updatedAt,
+        tracks: this.tracks().filter((t) => !t.audioUrl.startsWith('blob:')),
+        playlists: this.playlists(),
+        radio_stations: this.radioStations(),
+      };
+
+      const res = await fetch(`${this.activeBackendUrl}/api/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        this.isCloudSynced.set(true);
+      }
+    } catch (e) {
+      console.warn('Background sync failed:', e);
+    }
+  }
+
+  async syncWithBackendOnStartup() {
+    if (!this.isBackendOnline()) return;
+    try {
+      const res = await fetch(`${this.activeBackendUrl}/api/sync`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!data) return;
+
+      const cloudUpdatedAt = typeof data.updated_at === 'number' ? data.updated_at : 0;
+      const localUpdatedAt = this.getLocalUpdatedAt();
+      const localTracks = this.tracks();
+
+      if ((localTracks.length === 0 && Array.isArray(data.tracks) && data.tracks.length > 0) ||
+          (cloudUpdatedAt > localUpdatedAt && Array.isArray(data.tracks) && data.tracks.length > 0)) {
+        this.tracks.set(data.tracks);
+        if (Array.isArray(data.playlists)) this.playlists.set(data.playlists);
+        if (Array.isArray(data.radio_stations) && data.radio_stations.length > 0) {
+          this.radioStations.set(data.radio_stations);
+        }
+        this.saveLocalWithoutCloudSync();
+        try {
+          localStorage.setItem(this.STORAGE_KEY_UPDATED_AT, cloudUpdatedAt.toString());
+        } catch {}
+        this.isCloudSynced.set(true);
+        return;
+      }
+
+      if (localTracks.length > 0 && (cloudUpdatedAt === 0 || localUpdatedAt > cloudUpdatedAt)) {
+        await this.pushLibraryToBackend();
+        return;
+      }
+
+      if (Array.isArray(data.tracks) && data.tracks.length > 0) {
+        const localIds = new Set(localTracks.map((t) => t.id));
+        const localUrls = new Set(localTracks.map((t) => t.audioUrl));
+        const missingFromLocal = data.tracks.filter((t: Track) => !localIds.has(t.id) && !localUrls.has(t.audioUrl));
+        if (missingFromLocal.length > 0) {
+          this.tracks.update((cur) => [...cur, ...missingFromLocal]);
+          this.saveLocalWithoutCloudSync();
+          await this.pushLibraryToBackend();
+        }
+      }
+
+      this.isCloudSynced.set(true);
+    } catch (e) {
+      console.warn('Initial cloud sync error:', e);
     }
   }
 
@@ -369,6 +495,7 @@ export class LibraryService {
       .filter((t) => t.isFavorite)
       .map((t) => t.id);
     localStorage.setItem(this.STORAGE_KEY_FAVORITES, JSON.stringify(favs));
+    this.persistTracks();
   }
 
   addTrackToLibrary(track: Track) {

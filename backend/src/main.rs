@@ -353,6 +353,30 @@ async fn stream_audio(
     Ok((StatusCode::OK, res_headers, body).into_response())
 }
 
+async fn get_library() -> Result<Json<serde_json::Value>, StatusCode> {
+    if Path::new("library.json").exists() {
+        if let Ok(content) = std::fs::read_to_string("library.json") {
+            if let Ok(data) = serde_json::from_str::<serde_json::Value>(&content) {
+                return Ok(Json(data));
+            }
+        }
+    }
+    Ok(Json(serde_json::json!({
+        "tracks": [],
+        "playlists": [],
+        "radio_stations": []
+    })))
+}
+
+async fn save_library(Json(data): Json<serde_json::Value>) -> Result<StatusCode, StatusCode> {
+    if let Ok(json_str) = serde_json::to_string_pretty(&data) {
+        if std::fs::write("library.json", json_str).is_ok() {
+            return Ok(StatusCode::OK);
+        }
+    }
+    Err(StatusCode::INTERNAL_SERVER_ERROR)
+}
+
 #[tokio::main]
 async fn main() {
     let cors = CorsLayer::permissive();
@@ -363,6 +387,7 @@ async fn main() {
         .route("/api/search", get(search_music))
         .route("/api/extract", get(extract_info))
         .route("/api/stream", get(stream_audio))
+        .route("/api/sync", get(get_library).post(save_library))
         .layer(cors);
 
     let port: u16 = std::env::var("PORT")

@@ -156,7 +156,13 @@
       </div>
 
       <div class="sidebar-section backup-section">
-        <div class="section-label">РЕЗЕРВНАЯ КОПИЯ</div>
+        <div class="section-label-row">
+          <div class="section-label">РЕЗЕРВНАЯ КОПИЯ</div>
+          <div class="cloud-sync-pill" [class.synced]="libraryService.isCloudSynced()" [title]="libraryService.isCloudSynced() ? 'Все треки и плейлисты синхронизированы с облаком' : 'Синхронизация с сервером...'">
+            <span class="sync-dot"></span>
+            <span>{{ libraryService.isCloudSynced() ? 'Облако' : 'Синхр...' }}</span>
+          </div>
+        </div>
         <div class="sidebar-backup-btns">
           <button class="btn-backup-item" (click)="exportLibrary()" title="Экспортировать медиатеку в JSON файл">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -953,19 +959,25 @@
           }
         </div>
         <div class="modal-footer mobile-backup-row">
-          <button class="btn-backup-mini" (click)="exportLibrary()">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
-            <span>Экспорт JSON</span>
-          </button>
-          <label class="btn-backup-mini">
-            <input type="file" accept=".json" (change)="onBackupFileSelected($event)" style="display: none;" />
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-            </svg>
-            <span>Импорт JSON</span>
-          </label>
+          <div class="mobile-sync-badge font-mono" [class.synced]="libraryService.isCloudSynced()">
+            <span class="sync-dot"></span>
+            <span>{{ libraryService.isCloudSynced() ? 'Облако синхронизировано' : 'Синхронизация...' }}</span>
+          </div>
+          <div class="mobile-backup-actions">
+            <button class="btn-backup-mini" (click)="exportLibrary()">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              <span>Экспорт JSON</span>
+            </button>
+            <label class="btn-backup-mini">
+              <input type="file" accept=".json" (change)="onBackupFileSelected($event)" style="display: none;" />
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              <span>Импорт JSON</span>
+            </label>
+          </div>
         </div>
       </div>
     </div>

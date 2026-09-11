@@ -331,6 +331,47 @@
   }
 
   .backup-section {
+    .section-label-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+
+      .section-label {
+        margin-bottom: 0;
+      }
+
+      .cloud-sync-pill {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 10px;
+        font-family: var(--font-mono);
+        color: var(--text-muted);
+        background: var(--bg-card);
+        padding: 2px 6px;
+        border-radius: 4px;
+        border: 1px solid var(--border-subtle);
+
+        .sync-dot {
+          width: 5px;
+          height: 5px;
+          border-radius: 50%;
+          background: #f59e0b;
+        }
+
+        &.synced {
+          color: var(--color-success, #10b981);
+          border-color: rgba(16, 185, 129, 0.2);
+          background: rgba(16, 185, 129, 0.05);
+
+          .sync-dot {
+            background: #10b981;
+          }
+        }
+      }
+    }
+
     .sidebar-backup-btns {
       display: flex;
       gap: 6px;
@@ -3022,26 +3063,61 @@
 
     .mobile-backup-row {
       display: flex;
+      flex-direction: column;
       gap: 8px;
       padding-top: 10px;
 
-      .btn-backup-mini {
-        flex: 1;
+      .mobile-sync-badge {
         display: flex;
         align-items: center;
-        justify-content: center;
         gap: 6px;
+        font-size: 11px;
+        color: var(--text-muted);
         background: var(--bg-panel);
         border: 1px solid var(--border-subtle);
-        color: var(--text-secondary);
-        padding: 8px 10px;
+        padding: 6px 10px;
         border-radius: 6px;
-        font-size: 12px;
-        cursor: pointer;
 
-        &:active {
-          background: var(--bg-elevated);
-          color: var(--text-primary);
+        .sync-dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: #f59e0b;
+        }
+
+        &.synced {
+          color: var(--color-success, #10b981);
+          border-color: rgba(16, 185, 129, 0.25);
+          background: rgba(16, 185, 129, 0.05);
+
+          .sync-dot {
+            background: #10b981;
+          }
+        }
+      }
+
+      .mobile-backup-actions {
+        display: flex;
+        gap: 8px;
+
+        .btn-backup-mini {
+          flex: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          background: var(--bg-panel);
+          border: 1px solid var(--border-subtle);
+          color: var(--text-secondary);
+          padding: 8px 10px;
+          border-radius: 6px;
+          font-size: 12px;
+          cursor: pointer;
+
+          &:active {
+            background: var(--bg-elevated);
+            color: var(--text-primary);
+          }
         }
       }
     }
