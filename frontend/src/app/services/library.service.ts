@@ -638,4 +638,82 @@ export class LibraryService {
     this.persistPlaylists();
     return isAdded;
   }
+
+  exportLibrary() {
+    const backupData = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      tracks: this.tracks().filter((t) => !t.audioUrl.startsWith('blob:')),
+      playlists: this.playlists(),
+      radioStations: this.radioStations(),
+    };
+    const jsonStr = JSON.stringify(backupData, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `signal-backup-${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  importLibrary(content: string): { tracksCount: number; playlistsCount: number; stationsCount: number } {
+    const data = JSON.parse(content);
+    if (!data) throw new Error('Некорректный JSON файл бэкапа');
+
+    let importedTracks = 0;
+    if (Array.isArray(data.tracks)) {
+      const current = this.tracks();
+      const newTracks: Track[] = [];
+      for (const t of data.tracks) {
+        if (t && t.id && t.title && !current.some((x) => x.id === t.id || x.audioUrl === t.audioUrl)) {
+          newTracks.push(t);
+        }
+      }
+      if (newTracks.length > 0) {
+        this.tracks.update((cur) => [...newTracks, ...cur]);
+        this.persistTracks();
+      }
+      importedTracks = newTracks.length;
+    }
+
+    let importedPlaylists = 0;
+    if (Array.isArray(data.playlists)) {
+      const current = this.playlists();
+      const newPlaylists: Playlist[] = [];
+      for (const p of data.playlists) {
+        if (p && p.id && p.title && !current.some((x) => x.id === p.id)) {
+          newPlaylists.push(p);
+        }
+      }
+      if (newPlaylists.length > 0) {
+        this.playlists.update((cur) => [...cur, ...newPlaylists]);
+        this.persistPlaylists();
+      }
+      importedPlaylists = newPlaylists.length;
+    }
+
+    let importedStations = 0;
+    if (Array.isArray(data.radioStations)) {
+      const current = this.radioStations();
+      const newStations: RadioStation[] = [];
+      for (const s of data.radioStations) {
+        if (s && s.id && s.name && s.streamUrl && !current.some((x) => x.id === s.id || x.streamUrl === s.streamUrl)) {
+          newStations.push(s);
+        }
+      }
+      if (newStations.length > 0) {
+        this.radioStations.update((cur) => [...cur, ...newStations]);
+        this.persistStations();
+      }
+      importedStations = newStations.length;
+    }
+
+    return {
+      tracksCount: importedTracks,
+      playlistsCount: importedPlaylists,
+      stationsCount: importedStations,
+    };
+  }
 }
+

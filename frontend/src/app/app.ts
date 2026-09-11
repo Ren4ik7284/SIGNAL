@@ -431,4 +431,29 @@ export class App implements OnInit {
 
     this.audioService.playTrack(track, this.libraryService.tracks());
   }
+
+  exportLibrary() {
+    this.libraryService.exportLibrary();
+    this.showToast('Медиатека экспортирована в файл');
+  }
+
+  onBackupFileSelected(event: Event) {
+    const input = event.target as HTMLInputElement;
+    if (input.files && input.files.length > 0) {
+      const file = input.files[0];
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const res = this.libraryService.importLibrary(reader.result as string);
+          this.showToast(
+            `Импортировано: ${res.tracksCount} треков, ${res.playlistsCount} плейлистов, ${res.stationsCount} радио`
+          );
+        } catch {
+          this.showToast('Ошибка импорта: некорректный файл бэкапа');
+        }
+      };
+      reader.readAsText(file);
+      input.value = '';
+    }
+  }
 }
