@@ -10,7 +10,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AudioService } from './services/audio.service';
 import { LibraryService } from './services/library.service';
-import { Track, Playlist } from './models/track.model';
+import { Track, Playlist, RadioStation } from './models/track.model';
 
 @Component({
   selector: 'app-root',
@@ -24,11 +24,14 @@ export class App implements OnInit {
   readonly libraryService = inject(LibraryService);
 
   readonly isAddModalOpen = signal<boolean>(false);
-  readonly addModalTab = signal<'search' | 'url' | 'presets' | 'file'>('search');
+  readonly addModalTab = signal<'youtube' | 'search' | 'radio' | 'url' | 'file'>('youtube');
   readonly isPlaylistModalOpen = signal<boolean>(false);
   readonly isQueueDrawerOpen = signal<boolean>(false);
   readonly activeTab = signal<'all' | 'favorites' | 'uploads' | 'streams' | 'playlist'>('all');
   readonly toastMessage = signal<string | null>(null);
+
+  readonly isMobilePlayerExpanded = signal<boolean>(false);
+  readonly isMobilePlaylistsOpen = signal<boolean>(false);
 
   readonly modalSearchInput = signal<string>('');
 
@@ -39,6 +42,19 @@ export class App implements OnInit {
   });
 
   readonly activePlaylistPickerTrackId = signal<string | null>(null);
+
+  readonly youtubeUrlInput = signal<string>('');
+  readonly isExtractingUrl = signal<boolean>(false);
+  readonly extractedResult = signal<{ playlistTitle: string | null; tracks: Track[] } | null>(null);
+  readonly extractError = signal<string | null>(null);
+
+  readonly radioSearchInput = signal<string>('');
+  readonly isSearchingRadio = signal<boolean>(false);
+  readonly radioSearchResults = signal<RadioStation[]>([]);
+  readonly isAddStationModalOpen = signal<boolean>(false);
+  readonly newStationName = signal<string>('');
+  readonly newStationUrl = signal<string>('');
+  readonly newStationGenre = signal<string>('Pop');
 
   readonly inputUrl = signal<string>('');
   readonly inputTitle = signal<string>('');
@@ -136,6 +152,7 @@ export class App implements OnInit {
     } else {
       this.libraryService.activePlaylistId.set(null);
     }
+    this.isMobilePlaylistsOpen.set(false);
   }
 
   selectGenre(genre: string) {
@@ -158,6 +175,13 @@ export class App implements OnInit {
   }
 
   openOnlineSearchWithQuery(query: string) {
+    if (query.startsWith('http://') || query.startsWith('https://')) {
+      this.youtubeUrlInput.set(query);
+      this.addModalTab.set('youtube');
+      this.isAddModalOpen.set(true);
+      this.extractYouTubeUrl();
+      return;
+    }
     this.modalSearchInput.set(query);
     this.addModalTab.set('search');
     this.isAddModalOpen.set(true);
@@ -173,6 +197,119 @@ export class App implements OnInit {
   addOnlineTrackToLib(track: Track) {
     this.libraryService.addTrackToLibrary(track);
     this.showToast(`Трек "${track.title}" сохранен в медиатеку`);
+  }
+
+  async extractYouTubeUrl() {
+    const url = this.youtubeUrlInput().trim();
+    if (!url) return;
+
+    this.isExtractingUrl.set(true);
+    this.extractError.set(null);
+    this.extractedResult.set(null);
+
+    try {
+      const res = await this.libraryService.extractFromUrl(url);
+      if (!res.tracks || res.tracks.length === 0) {
+        this.extractError.set('Не удалось извлечь аудио по этой ссылке. Проверьте URL.');
+      } else {
+        this.extractedResult.set(res);
+      }
+    } catch {
+      this.extractError.set('Ошибка соединения с бэкендом. Убедитесь, что бэкенд запущен.');
+    } finally {
+      this.isExtractingUrl.set(false);
+    }
+  }
+
+  importAllExtractedTracks() {
+    const data = this.extractedResult();
+    if (!data || data.tracks.length === 0) return;
+
+    const title = data.playlistTitle || 'YouTube Плейлист';
+    this.libraryService.importPlaylist(title, data.tracks);
+    this.showToast(`Импортировано ${data.tracks.length} треков в плейлист "${title}"`);
+    this.isAddModalOpen.set(false);
+    this.youtubeUrlInput.set('');
+    this.extractedResult.set(null);
+  }
+
+  addExtractedTracksToLibraryOnly() {
+    const data = this.extractedResult();
+    if (!data || data.tracks.length === 0) return;
+
+    this.libraryService.addMultipleTracks(data.tracks);
+    this.showToast(`Добавлено ${data.tracks.length} треков в медиатеку`);
+    this.isAddModalOpen.set(false);
+    this.youtubeUrlInput.set('');
+    this.extractedResult.set(null);
+  }
+
+  playExtractedTrackNow(track: Track) {
+    this.libraryService.addTrackToLibrary(track);
+    this.audioService.playTrack(track, this.libraryService.tracks());
+    this.showToast(`Воспроизведение: ${track.title}`);
+  }
+
+  async searchRadio() {
+    const q = this.radioSearchInput().trim();
+    if (!q) {
+      this.radioSearchResults.set([]);
+      return;
+    }
+
+    this.isSearchingRadio.set(true);
+    try {
+      const results = await this.libraryService.searchRadioBrowser(q);
+      this.radioSearchResults.set(results);
+    } catch {
+      this.radioSearchResults.set([]);
+    } finally {
+      this.isSearchingRadio.set(false);
+    }
+  }
+
+  playRadioStation(station: RadioStation) {
+    const track = this.libraryService.createTrackFromStation(station);
+    this.audioService.playTrack(track, this.libraryService.tracks());
+    this.showToast(`Радио: ${station.name}`);
+  }
+
+  addRadioStationToMyList(station: RadioStation) {
+    this.libraryService.addRadioStation({
+      name: station.name,
+      streamUrl: station.streamUrl,
+      genre: station.genre,
+      country: station.country,
+      bitrate: station.bitrate,
+    });
+    this.showToast(`Станция "${station.name}" сохранена`);
+  }
+
+  deleteRadioStation(stationId: string) {
+    this.libraryService.removeRadioStation(stationId);
+    this.showToast('Радиостанция удалена');
+  }
+
+  resetRadioStations() {
+    this.libraryService.resetDefaultStations();
+    this.showToast('Список радиостанций сброшен по умолчанию');
+  }
+
+  saveCustomStation() {
+    const name = this.newStationName().trim();
+    const url = this.newStationUrl().trim();
+    if (!url) return;
+
+    this.libraryService.addRadioStation({
+      name: name || 'Мое радио',
+      streamUrl: url,
+      genre: this.newStationGenre().trim() || 'Custom',
+    });
+
+    this.isAddStationModalOpen.set(false);
+    this.newStationName.set('');
+    this.newStationUrl.set('');
+    this.showToast(`Станция "${name || 'Мое радио'}" добавлена`);
   }
 
   openCreatePlaylistModal() {
@@ -235,19 +372,6 @@ export class App implements OnInit {
     } finally {
       this.isUrlValidating.set(false);
     }
-  }
-
-  async addPresetStream(preset: { title: string; artist: string; genre: string; url: string; bitrate: string }) {
-    const track = await this.libraryService.addStreamTrack(
-      preset.url,
-      preset.title,
-      preset.artist,
-      preset.genre,
-      true
-    );
-    this.showToast(`Радиостанция "${preset.title}" добавлена`);
-    this.isAddModalOpen.set(false);
-    this.audioService.playTrack(track, this.libraryService.tracks());
   }
 
   onFileSelected(event: Event) {

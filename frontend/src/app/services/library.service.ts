@@ -1,48 +1,105 @@
 import { Injectable, signal, computed } from '@angular/core';
-import { Track, Playlist } from '../models/track.model';
+import { Track, Playlist, RadioStation } from '../models/track.model';
 
 @Injectable({
   providedIn: 'root',
 })
 export class LibraryService {
-  private readonly BACKEND_URL = 'https://signal-audio-backend-production.up.railway.app';
+  private activeBackendUrl = typeof window !== 'undefined' && window.location.protocol === 'https:'
+    ? 'https://signal-audio-backend-production.up.railway.app'
+    : 'http://localhost:8085';
+  private readonly FALLBACK_BACKEND_URL = 'https://signal-audio-backend-production.up.railway.app';
   private readonly STORAGE_KEY_TRACKS = 'signal_music_user_tracks';
   private readonly STORAGE_KEY_FAVORITES = 'signal_music_favorites';
   private readonly STORAGE_KEY_PLAYLISTS = 'signal_music_playlists';
+  private readonly STORAGE_KEY_STATIONS = 'signal_music_radio_stations';
 
-  readonly presetStreams: { title: string; artist: string; genre: string; url: string; bitrate: string }[] = [
+  readonly defaultRadioStations: RadioStation[] = [
     {
-      title: 'Drone Zone 24/7',
-      artist: 'SomaFM Stream',
-      genre: 'Ambient / Space',
-      url: 'https://ice2.somafm.com/dronezone-128-mp3',
+      id: 'default-1',
+      name: 'Record Chill-Out',
+      streamUrl: 'https://radiorecord.hostingradio.ru/chil96.aacp',
+      genre: 'Chillout / Lounge',
+      country: 'RU',
+      bitrate: '96k AAC',
+    },
+    {
+      id: 'default-2',
+      name: 'Europa Plus',
+      streamUrl: 'https://ep128.hostingradio.ru:8030/ep128.mp3',
+      genre: 'Pop / Top 40',
+      country: 'RU',
+      bitrate: '128k MP3',
+    },
+    {
+      id: 'default-3',
+      name: 'SomaFM: Groove Salad',
+      streamUrl: 'https://ice4.somafm.com/groovesalad-128-mp3',
+      genre: 'Ambient / Downtempo',
+      country: 'US',
       bitrate: '128k Live',
     },
     {
-      title: 'Groove Salad Chill',
-      artist: 'SomaFM Stream',
-      genre: 'Downtempo',
-      url: 'https://ice4.somafm.com/groovesalad-128-mp3',
+      id: 'default-4',
+      name: 'SomaFM: Drone Zone',
+      streamUrl: 'https://ice2.somafm.com/dronezone-128-mp3',
+      genre: 'Space / Atmospheric',
+      country: 'US',
       bitrate: '128k Live',
     },
     {
-      title: 'DEF CON Hacker Radio',
-      artist: 'SomaFM Stream',
-      genre: 'Electronic',
-      url: 'https://ice6.somafm.com/defcon-128-mp3',
+      id: 'default-5',
+      name: 'SomaFM: DEF CON Radio',
+      streamUrl: 'https://ice6.somafm.com/defcon-128-mp3',
+      genre: 'Electronic / Cyber',
+      country: 'US',
       bitrate: '128k Live',
     },
     {
-      title: 'Secret Agent 007',
-      artist: 'SomaFM Stream',
-      genre: 'Downtempo / Spy',
-      url: 'https://ice2.somafm.com/secretagent-128-mp3',
-      bitrate: '128k Live',
+      id: 'default-6',
+      name: 'Nightwave Plaza',
+      streamUrl: 'https://plaza.one/mp3',
+      genre: 'Vaporwave / Synth',
+      country: 'Global',
+      bitrate: '128k MP3',
+    },
+    {
+      id: 'default-7',
+      name: 'Jazz24',
+      streamUrl: 'https://live.wostreaming.net/manifest/kplufm-jazz24aac-ibc1',
+      genre: 'Classic Jazz',
+      country: 'US',
+      bitrate: '128k AAC',
+    },
+    {
+      id: 'default-8',
+      name: 'Rock Antenne',
+      streamUrl: 'https://stream.rockantenne.de/rockantenne/stream/mp3',
+      genre: 'Rock / Classic Rock',
+      country: 'DE',
+      bitrate: '192k MP3',
+    },
+    {
+      id: 'default-9',
+      name: 'Lofi 24/7 Stream',
+      streamUrl: 'https://stream.zeno.fm/f3wvbbqmdg8uv',
+      genre: 'Lo-Fi / Beats',
+      country: 'Global',
+      bitrate: '128k MP3',
+    },
+    {
+      id: 'default-10',
+      name: 'Record Deep',
+      streamUrl: 'https://radiorecord.hostingradio.ru/deep96.aacp',
+      genre: 'Deep House',
+      country: 'RU',
+      bitrate: '96k AAC',
     },
   ];
 
   readonly tracks = signal<Track[]>([]);
   readonly playlists = signal<Playlist[]>([]);
+  readonly radioStations = signal<RadioStation[]>([]);
   readonly searchQuery = signal<string>('');
   readonly selectedGenre = signal<string>('all');
   readonly selectedView = signal<'all' | 'favorites' | 'uploads' | 'streams' | 'playlist'>('all');
@@ -96,6 +153,10 @@ export class LibraryService {
     this.checkBackendHealth();
   }
 
+  getBackendUrl(): string {
+    return this.activeBackendUrl;
+  }
+
   private initLibrary() {
     let savedTracks: Track[] = [];
     try {
@@ -121,6 +182,21 @@ export class LibraryService {
       savedPlaylists = [];
     }
 
+    let savedStations: RadioStation[] = [];
+    try {
+      const storedSt = localStorage.getItem(this.STORAGE_KEY_STATIONS);
+      if (storedSt) savedStations = JSON.parse(storedSt);
+    } catch {
+      savedStations = [];
+    }
+
+    if (!savedStations || savedStations.length === 0) {
+      savedStations = [...this.defaultRadioStations];
+      try {
+        localStorage.setItem(this.STORAGE_KEY_STATIONS, JSON.stringify(savedStations));
+      } catch {}
+    }
+
     const processedTracks = savedTracks.map((t) => ({
       ...t,
       isFavorite: favIds.includes(t.id),
@@ -128,17 +204,33 @@ export class LibraryService {
 
     this.tracks.set(processedTracks);
     this.playlists.set(savedPlaylists);
+    this.radioStations.set(savedStations);
   }
 
   async checkBackendHealth() {
-    try {
-      const res = await fetch(`${this.BACKEND_URL}/api/health`);
-      if (res.ok) {
-        this.isBackendOnline.set(true);
-      }
-    } catch {
-      this.isBackendOnline.set(false);
+    const savedBackend = typeof localStorage !== 'undefined' ? localStorage.getItem('signal_backend_url') : null;
+    const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+    const urlsToTest: string[] = [];
+
+    if (savedBackend) urlsToTest.push(savedBackend);
+    if (isHttps) {
+      urlsToTest.push(this.FALLBACK_BACKEND_URL);
+    } else {
+      urlsToTest.push('http://localhost:8085', this.FALLBACK_BACKEND_URL);
     }
+
+    for (const testUrl of urlsToTest) {
+      try {
+        const res = await fetch(`${testUrl}/api/health`, { signal: AbortSignal.timeout(3000) });
+        if (res.ok) {
+          this.activeBackendUrl = testUrl;
+          this.isBackendOnline.set(true);
+          return;
+        }
+      } catch {}
+    }
+
+    this.isBackendOnline.set(false);
   }
 
   async searchOnline(query: string): Promise<Track[]> {
@@ -150,19 +242,19 @@ export class LibraryService {
 
     this.isSearchingOnline.set(true);
     try {
-      const res = await fetch(`${this.BACKEND_URL}/api/search?q=${encodeURIComponent(q)}`);
+      const res = await fetch(`${this.activeBackendUrl}/api/search?q=${encodeURIComponent(q)}`);
       if (!res.ok) throw new Error('Search failed');
 
       const data: { id: string; title: string; artist: string; duration: number; audio_url: string; cover_url?: string }[] = await res.json();
       
       const tracks: Track[] = data.map((item) => ({
-        id: 'online-' + item.id,
+        id: 'yt-' + item.id,
         title: item.title,
         artist: item.artist,
         duration: Math.round(item.duration),
         audioUrl: item.audio_url,
         coverUrl: item.cover_url,
-        genre: 'Online Music',
+        genre: 'YouTube',
         format: 'mp3',
         bitrate: '192 kbps',
         plays: 0,
@@ -180,6 +272,64 @@ export class LibraryService {
     }
   }
 
+  async extractFromUrl(url: string): Promise<{ playlistTitle: string | null; tracks: Track[] }> {
+    const targetUrl = url.trim();
+    if (!targetUrl) return { playlistTitle: null, tracks: [] };
+
+    const res = await fetch(`${this.activeBackendUrl}/api/extract?url=${encodeURIComponent(targetUrl)}`);
+    if (!res.ok) throw new Error('Extract failed');
+
+    const data: {
+      playlist_title: string | null;
+      tracks: { id: string; title: string; artist: string; duration: number; audio_url: string; cover_url?: string }[];
+    } = await res.json();
+
+    const tracks: Track[] = (data.tracks || []).map((item) => ({
+      id: 'yt-' + item.id + '-' + Math.floor(Math.random() * 1000),
+      title: item.title,
+      artist: item.artist,
+      duration: Math.round(item.duration),
+      audioUrl: item.audio_url,
+      coverUrl: item.cover_url,
+      genre: 'YouTube',
+      format: 'mp3',
+      bitrate: '192 kbps',
+      plays: 0,
+      isFavorite: false,
+      addedAt: new Date().toISOString().split('T')[0],
+    }));
+
+    return {
+      playlistTitle: data.playlist_title,
+      tracks,
+    };
+  }
+
+  importPlaylist(title: string, tracks: Track[]): Playlist {
+    const newTracks: Track[] = [];
+    for (const t of tracks) {
+      const exists = this.tracks().some((x) => x.id === t.id || x.audioUrl === t.audioUrl);
+      if (!exists) {
+        newTracks.push(t);
+      }
+    }
+
+    if (newTracks.length > 0) {
+      this.tracks.update((current) => [...newTracks, ...current]);
+      this.persistTracks();
+    }
+
+    const playlist = this.createPlaylist(title, `Импортировано: ${tracks.length} треков`);
+    const trackIds = tracks.map((t) => t.id);
+
+    this.playlists.update((pls) =>
+      pls.map((p) => (p.id === playlist.id ? { ...p, trackIds } : p))
+    );
+    this.persistPlaylists();
+
+    return playlist;
+  }
+
   private persistTracks() {
     const persistable = this.tracks().filter((t) => !t.audioUrl.startsWith('blob:'));
     try {
@@ -194,6 +344,14 @@ export class LibraryService {
       localStorage.setItem(this.STORAGE_KEY_PLAYLISTS, JSON.stringify(this.playlists()));
     } catch (e) {
       console.warn('Failed to save playlists to localStorage:', e);
+    }
+  }
+
+  private persistStations() {
+    try {
+      localStorage.setItem(this.STORAGE_KEY_STATIONS, JSON.stringify(this.radioStations()));
+    } catch (e) {
+      console.warn('Failed to save stations to localStorage:', e);
     }
   }
 
@@ -218,6 +376,91 @@ export class LibraryService {
     if (!exists) {
       this.tracks.update((cur) => [track, ...cur]);
       this.persistTracks();
+    }
+  }
+
+  addMultipleTracks(tracks: Track[]) {
+    const toAdd: Track[] = [];
+    for (const t of tracks) {
+      const exists = this.tracks().some((x) => x.id === t.id || x.audioUrl === t.audioUrl);
+      if (!exists) toAdd.push(t);
+    }
+    if (toAdd.length > 0) {
+      this.tracks.update((cur) => [...toAdd, ...cur]);
+      this.persistTracks();
+    }
+  }
+
+  addRadioStation(station: { name: string; streamUrl: string; genre?: string; country?: string; bitrate?: string }) {
+    const cleanUrl = station.streamUrl.trim();
+    if (!cleanUrl) return;
+
+    const newStation: RadioStation = {
+      id: 'custom-' + Date.now(),
+      name: station.name.trim() || 'Пользовательская станция',
+      streamUrl: cleanUrl,
+      genre: station.genre?.trim() || 'Radio',
+      country: station.country?.trim() || 'Custom',
+      bitrate: station.bitrate?.trim() || 'Live',
+      isCustom: true,
+    };
+
+    this.radioStations.update((cur) => [newStation, ...cur]);
+    this.persistStations();
+  }
+
+  removeRadioStation(stationId: string) {
+    this.radioStations.update((cur) => cur.filter((s) => s.id !== stationId));
+    this.persistStations();
+  }
+
+  resetDefaultStations() {
+    this.radioStations.set([...this.defaultRadioStations]);
+    this.persistStations();
+  }
+
+  createTrackFromStation(station: RadioStation): Track {
+    const track: Track = {
+      id: 'radio-' + station.id,
+      title: station.name,
+      artist: station.country ? `Радио (${station.country})` : 'Интернет-радио',
+      album: 'Live Radio Stations',
+      duration: 0,
+      audioUrl: station.streamUrl,
+      coverUrl: station.favicon,
+      genre: station.genre || 'Radio',
+      format: 'stream',
+      bitrate: station.bitrate || 'Live Stream',
+      plays: 0,
+      isFavorite: false,
+      addedAt: new Date().toISOString().split('T')[0],
+      isLiveStream: true,
+    };
+    this.addTrackToLibrary(track);
+    return track;
+  }
+
+  async searchRadioBrowser(query: string): Promise<RadioStation[]> {
+    const q = query.trim();
+    if (!q) return [];
+
+    try {
+      const res = await fetch(`https://de1.api.radio-browser.info/json/stations/byname/${encodeURIComponent(q)}?limit=20`);
+      if (!res.ok) throw new Error('Radio search failed');
+
+      const data: any[] = await res.json();
+      return data.map((item) => ({
+        id: 'rb-' + (item.stationuuid || Math.random()),
+        name: item.name,
+        streamUrl: item.url_resolved || item.url,
+        genre: item.tags ? item.tags.split(',').slice(0, 2).join(' / ') : 'Radio',
+        country: item.countrycode || item.country || '',
+        bitrate: item.bitrate ? `${item.bitrate}k` : 'Live',
+        favicon: item.favicon || undefined,
+        isCustom: false,
+      }));
+    } catch {
+      return [];
     }
   }
 

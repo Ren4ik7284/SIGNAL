@@ -3,7 +3,7 @@ export interface Track {
   title: string;
   artist: string;
   album?: string;
-  duration: number; // in seconds, 0 or -1 if live stream
+  duration: number;
   audioUrl: string;
   coverUrl?: string;
   genre: string;
@@ -23,4 +23,15 @@ export interface Playlist {
   description: string;
   trackIds: string[];
   coverText: string;
+}
+
+export interface RadioStation {
+  id: string;
+  name: string;
+  streamUrl: string;
+  genre: string;
+  country?: string;
+  bitrate?: string;
+  favicon?: string;
+  isCustom?: boolean;
 }
