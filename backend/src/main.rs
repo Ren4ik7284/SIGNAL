@@ -83,6 +83,12 @@ fn get_cookies_path() -> Option<String> {
     None
 }
 
+fn has_chromium_profile() -> bool {
+    let home = std::env::var("HOME").unwrap_or_default();
+    Path::new(&format!("{}/.config/chromium", home)).exists()
+        || Path::new(&format!("{}/.config/google-chrome", home)).exists()
+}
+
 fn apply_yt_dlp_common_args(cmd: &mut Command) {
     cmd.stdin(Stdio::null());
     cmd.stderr(Stdio::null());
@@ -94,7 +100,7 @@ fn apply_yt_dlp_common_args(cmd: &mut Command) {
     ]);
     if let Some(cookies) = get_cookies_path() {
         cmd.arg("--cookies").arg(cookies);
-    } else {
+    } else if has_chromium_profile() {
         cmd.args(["--cookies-from-browser", "chromium"]);
     }
 }
@@ -102,6 +108,10 @@ fn apply_yt_dlp_common_args(cmd: &mut Command) {
 async fn ensure_cookies_on_start() {
     if get_cookies_path().is_some() {
         println!("[SIGNAL] YouTube cookies found.");
+        return;
+    }
+    if !has_chromium_profile() {
+        println!("[SIGNAL] Running in container or without Chromium profile, skipping cookie auto-export.");
         return;
     }
     let yt_cmd = get_yt_dlp_cmd();
