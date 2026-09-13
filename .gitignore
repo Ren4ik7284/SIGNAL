@@ -10,3 +10,7 @@ backend/uploads/*
 .DS_Store
 *.log
 npm-debug.log*
+cookies.txt
+backend/cookies.txt
+library.json
+backend/library.json
