@@ -42,6 +42,7 @@ export class AudioService {
 
   constructor() {
     this.audio = new Audio();
+    this.audio.crossOrigin = 'anonymous';
     this.audio.preload = 'metadata';
     this.audio.volume = this.volume();
 
@@ -119,12 +120,12 @@ export class AudioService {
     this.duration.set(initialDuration);
 
     let playUrl = track.audioUrl;
-    if (playUrl.includes('/api/stream')) {
+    if (playUrl.startsWith('/api/stream')) {
+      playUrl = `${this.libraryService.getBackendUrl()}${playUrl}`;
+    } else if (playUrl.includes('/api/stream')) {
       const activeBase = this.libraryService.getBackendUrl();
       const streamIdx = playUrl.indexOf('/api/stream');
-      if (streamIdx !== -1) {
-        playUrl = activeBase + playUrl.slice(streamIdx);
-      }
+      playUrl = `${activeBase}${playUrl.slice(streamIdx)}`;
     } else if (typeof window !== 'undefined' && window.location.protocol === 'https:' && playUrl.startsWith('http://')) {
       const activeBase = this.libraryService.getBackendUrl();
       playUrl = `${activeBase}/api/stream?url=${encodeURIComponent(playUrl)}`;
@@ -169,10 +170,12 @@ export class AudioService {
     const track = this.currentTrack();
     if (!track) return;
 
-    if (track.audioUrl.includes('/api/stream')) {
-      const baseUrl = track.audioUrl.split('&ss=')[0];
+    if (track.audioUrl.includes('/api/stream') || track.audioUrl.startsWith('/api/stream')) {
+      const streamIdx = track.audioUrl.indexOf('/api/stream');
+      const streamPath = streamIdx !== -1 ? track.audioUrl.slice(streamIdx) : track.audioUrl;
+      const baseStreamUrl = `${this.libraryService.getBackendUrl()}${streamPath}`.split('&ss=')[0];
       const ssParam = clamped > 0 ? `&ss=${Math.round(clamped)}` : '';
-      const newUrl = `${baseUrl}${ssParam}`;
+      const newUrl = `${baseStreamUrl}${ssParam}`;
 
       this.streamSeekOffset.set(clamped);
       this.currentTime.set(clamped);

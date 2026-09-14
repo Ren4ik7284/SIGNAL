@@ -7,13 +7,17 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::process::Stdio;
+use std::time::Duration;
 use tokio::io::AsyncBufReadExt;
 use tokio::process::Command;
 use tokio_util::io::ReaderStream;
 use tower_http::cors::CorsLayer;
+
+const CLOUD_FALLBACK_URL: &str = "https://signal-audio-backend-production.up.railway.app";
 
 #[derive(Debug, Deserialize)]
 pub struct SearchParams {
@@ -32,6 +36,11 @@ pub struct StreamParams {
     pub ss: Option<u64>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct CoverParams {
+    pub url: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchTrack {
     pub id: String,
@@ -46,6 +55,10 @@ pub struct SearchTrack {
 pub struct ExtractResponse {
     pub playlist_title: Option<String>,
     pub tracks: Vec<SearchTrack>,
+}
+
+fn is_cloud_env() -> bool {
+    std::env::var("RAILWAY_PUBLIC_DOMAIN").is_ok()
 }
 
 fn get_yt_dlp_cmd() -> String {
@@ -95,9 +108,15 @@ fn apply_yt_dlp_common_args(cmd: &mut Command) {
     cmd.args([
         "--no-warnings",
         "--no-check-certificates",
-        "--remote-components",
-        "ejs:github",
+        "--extractor-args",
+        "youtube:player_client=ios,web,android",
     ]);
+    if let Ok(proxy) = std::env::var("YOUTUBE_PROXY") {
+        let p = proxy.trim();
+        if !p.is_empty() {
+            cmd.arg("--proxy").arg(p);
+        }
+    }
     if let Some(cookies) = get_cookies_path() {
         cmd.arg("--cookies").arg(cookies);
     } else if has_chromium_profile() {
@@ -146,9 +165,12 @@ fn get_base_url() -> String {
 }
 
 fn parse_track_json(item: &serde_json::Value, base_url: &str) -> Option<SearchTrack> {
-    let id = match item["id"].as_str() {
-        Some(val) => val.to_string(),
-        None => return None,
+    let id = if let Some(val) = item["id"].as_str() {
+        val.to_string()
+    } else if let Some(num) = item["id"].as_i64() {
+        num.to_string()
+    } else {
+        return None;
     };
 
     if id.is_empty() {
@@ -197,6 +219,14 @@ fn parse_track_json(item: &serde_json::Value, base_url: &str) -> Option<SearchTr
         }
     }
 
+    let proxied_cover = cover_url.map(|u| {
+        if u.contains("ytimg.com") {
+            format!("{}/api/cover?url={}", base_url, urlencoding::encode(&u))
+        } else {
+            u
+        }
+    });
+
     let encoded_url = urlencoding::encode(&track_url);
     let audio_url = format!("{}/api/stream?url={}", base_url, encoded_url);
 
@@ -206,12 +236,110 @@ fn parse_track_json(item: &serde_json::Value, base_url: &str) -> Option<SearchTr
         artist,
         duration,
         audio_url,
-        cover_url,
+        cover_url: proxied_cover,
     })
 }
 
 async fn health_check() -> &'static str {
     "SIGNAL // Rust Engine Online"
+}
+
+async fn proxy_cover(Query(params): Query<CoverParams>) -> Result<Response, StatusCode> {
+    let target = params.url.trim();
+    if target.is_empty() || (!target.starts_with("http://") && !target.starts_with("https://")) {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(6))
+        .build()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let resp = client
+        .get(target)
+        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+        .send()
+        .await
+        .map_err(|_| StatusCode::BAD_GATEWAY)?;
+
+    let content_type = resp
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("image/jpeg")
+        .to_string();
+
+    let bytes = resp.bytes().await.map_err(|_| StatusCode::BAD_GATEWAY)?;
+
+    let mut res_headers = HeaderMap::new();
+    res_headers.insert(header::CONTENT_TYPE, content_type.parse().unwrap());
+    res_headers.insert(
+        header::CACHE_CONTROL,
+        "public, max-age=604800, immutable".parse().unwrap(),
+    );
+    res_headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*".parse().unwrap());
+
+    Ok((StatusCode::OK, res_headers, bytes).into_response())
+}
+
+async fn execute_yt_dlp_search(yt_cmd: &str, search_arg: &str, timeout_sec: u64, base_url: &str) -> Vec<SearchTrack> {
+    let mut cmd = Command::new(yt_cmd);
+    apply_yt_dlp_common_args(&mut cmd);
+    cmd.args([
+        search_arg,
+        "--dump-json",
+        "--flat-playlist",
+    ])
+    .stdout(Stdio::piped())
+    .stderr(Stdio::null());
+
+    let mut tracks = Vec::new();
+
+    let spawn_res = cmd.spawn();
+    if let Ok(mut child) = spawn_res {
+        if let Some(stdout) = child.stdout.take() {
+            let mut reader = tokio::io::BufReader::new(stdout).lines();
+            let read_task = async {
+                while let Ok(Some(line)) = reader.next_line().await {
+                    if let Ok(item) = serde_json::from_str::<serde_json::Value>(&line) {
+                        if let Some(track) = parse_track_json(&item, base_url) {
+                            tracks.push(track);
+                        }
+                    }
+                }
+            };
+            let _ = tokio::time::timeout(Duration::from_secs(timeout_sec), read_task).await;
+        }
+        let _ = child.kill().await;
+    }
+
+    tracks
+}
+
+async fn execute_cloud_search(query: &str, base_url: &str) -> Vec<SearchTrack> {
+    let cloud_url = format!("{}/api/search?q={}", CLOUD_FALLBACK_URL, urlencoding::encode(query));
+    let client = match reqwest::Client::builder().timeout(Duration::from_secs(5)).build() {
+        Ok(c) => c,
+        Err(_) => return Vec::new(),
+    };
+
+    if let Ok(resp) = client.get(&cloud_url).send().await {
+        if resp.status().is_success() {
+            if let Ok(bytes) = resp.bytes().await {
+                if let Ok(mut list) = serde_json::from_slice::<Vec<SearchTrack>>(&bytes) {
+                    for t in &mut list {
+                        if t.audio_url.contains("/api/stream") {
+                            let stream_idx = t.audio_url.find("/api/stream").unwrap();
+                            t.audio_url = format!("{}{}", base_url, &t.audio_url[stream_idx..]);
+                        }
+                    }
+                    return list;
+                }
+            }
+        }
+    }
+
+    Vec::new()
 }
 
 async fn search_music(Query(params): Query<SearchParams>) -> Result<Json<Vec<SearchTrack>>, StatusCode> {
@@ -222,72 +350,57 @@ async fn search_music(Query(params): Query<SearchParams>) -> Result<Json<Vec<Sea
 
     let yt_cmd = get_yt_dlp_cmd();
     let base_url = get_base_url();
-
     let is_direct_url = query.starts_with("http://") || query.starts_with("https://");
-    let search_arg = if is_direct_url {
-        query.to_string()
-    } else {
-        format!("ytsearch15:{}", query)
-    };
 
     println!("[search] Performing search for: {}", query);
-    let mut cmd = Command::new(&yt_cmd);
-    apply_yt_dlp_common_args(&mut cmd);
-    cmd.args([
-        &search_arg,
-        "--dump-json",
-        "--flat-playlist",
-    ])
-    .stdout(Stdio::piped())
-    .stderr(Stdio::null());
 
-    let mut tracks = Vec::new();
-
-    if let Ok(mut child) = cmd.spawn() {
-        if let Some(stdout) = child.stdout.take() {
-            let mut reader = tokio::io::BufReader::new(stdout).lines();
-            while let Ok(Some(line)) = reader.next_line().await {
-                if let Ok(item) = serde_json::from_str::<serde_json::Value>(&line) {
-                    if let Some(track) = parse_track_json(&item, &base_url) {
-                        tracks.push(track);
-                    }
-                }
+    if is_direct_url {
+        let mut tracks = execute_yt_dlp_search(&yt_cmd, query, 8, &base_url).await;
+        if tracks.is_empty() && !is_cloud_env() {
+            let cloud_tracks = execute_cloud_search(query, &base_url).await;
+            if !cloud_tracks.is_empty() {
+                tracks = cloud_tracks;
             }
         }
-        let _ = child.wait().await;
+        return Ok(Json(tracks));
     }
 
-    // Secondary fallback to SoundCloud if YouTube search returned 0 items
-    if tracks.is_empty() && !is_direct_url {
-        println!("[search] YouTube returned 0 results, trying SoundCloud fallback...");
-        let sc_arg = format!("scsearch10:{}", query);
-        let mut sc_cmd = Command::new(&yt_cmd);
-        apply_yt_dlp_common_args(&mut sc_cmd);
-        sc_cmd.args([
-            &sc_arg,
-            "--dump-json",
-            "--flat-playlist",
-        ])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null());
+    let yt_arg = format!("ytsearch10:{}", query);
+    let sc_arg = format!("scsearch10:{}", query);
 
-        if let Ok(mut sc_child) = sc_cmd.spawn() {
-            if let Some(sc_stdout) = sc_child.stdout.take() {
-                let mut sc_reader = tokio::io::BufReader::new(sc_stdout).lines();
-                while let Ok(Some(line)) = sc_reader.next_line().await {
-                    if let Ok(item) = serde_json::from_str::<serde_json::Value>(&line) {
-                        if let Some(track) = parse_track_json(&item, &base_url) {
-                            tracks.push(track);
-                        }
-                    }
-                }
-            }
-            let _ = sc_child.wait().await;
+    let (yt_res, sc_res) = tokio::join!(
+        execute_yt_dlp_search(&yt_cmd, &yt_arg, 4, &base_url),
+        execute_yt_dlp_search(&yt_cmd, &sc_arg, 4, &base_url),
+    );
+
+    let mut combined = Vec::new();
+    let mut seen_ids = HashSet::new();
+
+    for t in yt_res {
+        if seen_ids.insert(t.id.clone()) {
+            combined.push(t);
         }
     }
 
-    println!("[search] Found {} tracks for: {}", tracks.len(), query);
-    Ok(Json(tracks))
+    // If YouTube search was blocked / empty locally and we are not in cloud, try cloud search
+    if combined.is_empty() && !is_cloud_env() {
+        println!("[search] Local YouTube search empty/blocked, querying cloud engine...");
+        let cloud_tracks = execute_cloud_search(query, &base_url).await;
+        for t in cloud_tracks {
+            if seen_ids.insert(t.id.clone()) {
+                combined.push(t);
+            }
+        }
+    }
+
+    for t in sc_res {
+        if seen_ids.insert(t.id.clone()) {
+            combined.push(t);
+        }
+    }
+
+    println!("[search] Found {} tracks for: {}", combined.len(), query);
+    Ok(Json(combined))
 }
 
 async fn extract_info(Query(params): Query<ExtractParams>) -> Result<Json<ExtractResponse>, StatusCode> {
@@ -323,23 +436,48 @@ async fn extract_info(Query(params): Query<ExtractParams>) -> Result<Json<Extrac
     let mut tracks = Vec::new();
     let mut playlist_title = None;
 
-    while let Ok(Some(line)) = reader.next_line().await {
-        if let Ok(item) = serde_json::from_str::<serde_json::Value>(&line) {
-            if playlist_title.is_none() {
-                if let Some(title) = item["playlist_title"].as_str() {
-                    playlist_title = Some(title.to_string());
-                } else if let Some(title) = item["playlist"].as_str() {
-                    playlist_title = Some(title.to_string());
+    let read_task = async {
+        while let Ok(Some(line)) = reader.next_line().await {
+            if let Ok(item) = serde_json::from_str::<serde_json::Value>(&line) {
+                if playlist_title.is_none() {
+                    if let Some(title) = item["playlist_title"].as_str() {
+                        playlist_title = Some(title.to_string());
+                    } else if let Some(title) = item["playlist"].as_str() {
+                        playlist_title = Some(title.to_string());
+                    }
+                }
+
+                if let Some(track) = parse_track_json(&item, &base_url) {
+                    tracks.push(track);
                 }
             }
+        }
+    };
 
-            if let Some(track) = parse_track_json(&item, &base_url) {
-                tracks.push(track);
+    let _ = tokio::time::timeout(Duration::from_secs(10), read_task).await;
+    let _ = child.kill().await;
+
+    // Fallback to cloud extract if local extraction yielded 0 items
+    if tracks.is_empty() && !is_cloud_env() {
+        let cloud_url = format!("{}/api/extract?url={}", CLOUD_FALLBACK_URL, urlencoding::encode(url));
+        if let Ok(client) = reqwest::Client::builder().timeout(Duration::from_secs(8)).build() {
+            if let Ok(resp) = client.get(&cloud_url).send().await {
+                if resp.status().is_success() {
+                    if let Ok(bytes) = resp.bytes().await {
+                        if let Ok(mut ext_resp) = serde_json::from_slice::<ExtractResponse>(&bytes) {
+                            for t in &mut ext_resp.tracks {
+                                if t.audio_url.contains("/api/stream") {
+                                    let stream_idx = t.audio_url.find("/api/stream").unwrap();
+                                    t.audio_url = format!("{}{}", base_url, &t.audio_url[stream_idx..]);
+                                }
+                            }
+                            return Ok(Json(ext_resp));
+                        }
+                    }
+                }
             }
         }
     }
-
-    let _ = child.wait().await;
 
     Ok(Json(ExtractResponse {
         playlist_title,
@@ -385,6 +523,19 @@ async fn stream_audio(
         || target.contains(":80")
     {
         direct_url = target.clone();
+    } else if target.contains("soundcloud.com") {
+        println!("[stream] Resolving SoundCloud stream for: {}", target);
+        let mut sc_cmd = Command::new(&yt_cmd);
+        apply_yt_dlp_common_args(&mut sc_cmd);
+        sc_cmd.args(["-g", "-f", "bestaudio/b", &target]);
+        if let Ok(Ok(out)) = tokio::time::timeout(Duration::from_secs(6), sc_cmd.output()).await {
+            if out.status.success() {
+                let u = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                if !u.is_empty() {
+                    direct_url = u;
+                }
+            }
+        }
     } else {
         println!("[stream] Resolving audio stream for: {}", target);
         // 1. Direct extraction with yt-dlp
@@ -393,7 +544,7 @@ async fn stream_audio(
         apply_yt_dlp_common_args(&mut cmd);
         cmd.arg(&target);
 
-        if let Ok(Ok(out)) = tokio::time::timeout(std::time::Duration::from_secs(12), cmd.output()).await {
+        if let Ok(Ok(out)) = tokio::time::timeout(Duration::from_secs(5), cmd.output()).await {
             if out.status.success() {
                 let u = String::from_utf8_lossy(&out.stdout).trim().to_string();
                 if !u.is_empty() {
@@ -402,9 +553,36 @@ async fn stream_audio(
             }
         }
 
-        // 2. Fallback if direct extraction failed (e.g. SoundCloud DRM, or geo-locked track)
+        // 2. Fallback to Cloud Proxy Stream if local extraction failed (e.g. YouTube blocked in Russia or bot-check)
+        if direct_url.is_empty() && !is_cloud_env() {
+            println!("[stream] Local extraction failed/blocked. Proxying stream from cloud backend...");
+            let cloud_stream_url = format!(
+                "{}/api/stream?url={}{}",
+                CLOUD_FALLBACK_URL,
+                urlencoding::encode(&target),
+                params.ss.map(|s| format!("&ss={}", s)).unwrap_or_default()
+            );
+
+            if let Ok(client) = reqwest::Client::builder().timeout(Duration::from_secs(12)).build() {
+                if let Ok(resp) = client.get(&cloud_stream_url).send().await {
+                    if resp.status().is_success() {
+                        let stream = resp.bytes_stream();
+                        let body = Body::from_stream(stream);
+                        let mut res_headers = HeaderMap::new();
+                        res_headers.insert(header::CONTENT_TYPE, "audio/mpeg".parse().unwrap());
+                        res_headers.insert(header::ACCEPT_RANGES, "bytes".parse().unwrap());
+                        res_headers.insert(header::CACHE_CONTROL, "no-cache, no-store".parse().unwrap());
+                        res_headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*".parse().unwrap());
+                        res_headers.insert(header::ACCESS_CONTROL_EXPOSE_HEADERS, "*".parse().unwrap());
+                        return Ok((StatusCode::OK, res_headers, body).into_response());
+                    }
+                }
+            }
+        }
+
+        // 3. Fallback to SoundCloud search
         if direct_url.is_empty() {
-            println!("[stream] Direct extraction failed. Getting metadata for fallback search...");
+            println!("[stream] Getting track metadata for SoundCloud fallback search...");
             let mut info_cmd = Command::new(&yt_cmd);
             apply_yt_dlp_common_args(&mut info_cmd);
             info_cmd.args(["--dump-json", "--flat-playlist", "--ignore-no-formats-error", &target]);
@@ -412,7 +590,7 @@ async fn stream_audio(
             let mut resolved_title = String::new();
             let mut resolved_uploader = String::new();
 
-            if let Ok(Ok(iout)) = tokio::time::timeout(std::time::Duration::from_secs(8), info_cmd.output()).await {
+            if let Ok(Ok(iout)) = tokio::time::timeout(Duration::from_secs(5), info_cmd.output()).await {
                 if let Ok(item) = serde_json::from_slice::<serde_json::Value>(&iout.stdout) {
                     if let Some(t) = item["title"].as_str() {
                         resolved_title = t.to_string();
@@ -427,47 +605,19 @@ async fn stream_audio(
                 }
             }
 
-            if resolved_title.is_empty() && target.contains("soundcloud.com/") {
-                if let Some(path) = target.split("soundcloud.com/").nth(1) {
-                    let parts: Vec<&str> = path.split('?').next().unwrap_or("").split('/').filter(|s| !s.is_empty()).collect();
-                    if parts.len() >= 2 {
-                        resolved_uploader = parts[0].replace('-', " ");
-                        resolved_title = parts[1].replace('-', " ");
-                    }
-                }
-            }
-
             if !resolved_title.is_empty() {
-                let search_query = format!("ytsearch1:{} {}", resolved_title, resolved_uploader);
-                println!("[stream] Trying YouTube search fallback: {}", search_query);
-                let mut yt_fallback = Command::new(&yt_cmd);
-                yt_fallback.args(["-g", "-f", "bestaudio/ba/b"]);
-                apply_yt_dlp_common_args(&mut yt_fallback);
-                yt_fallback.arg(&search_query);
+                let sc_query = format!("scsearch1:{} {}", resolved_title, resolved_uploader);
+                println!("[stream] Trying SoundCloud search fallback: {}", sc_query);
+                let mut sc_fallback = Command::new(&yt_cmd);
+                sc_fallback.args(["-g", "-f", "bestaudio/b"]);
+                apply_yt_dlp_common_args(&mut sc_fallback);
+                sc_fallback.arg(&sc_query);
 
-                if let Ok(Ok(sc)) = tokio::time::timeout(std::time::Duration::from_secs(10), yt_fallback.output()).await {
+                if let Ok(Ok(sc)) = tokio::time::timeout(Duration::from_secs(5), sc_fallback.output()).await {
                     if sc.status.success() {
                         let u = String::from_utf8_lossy(&sc.stdout).trim().to_string();
                         if !u.is_empty() {
                             direct_url = u;
-                        }
-                    }
-                }
-
-                if direct_url.is_empty() {
-                    let sc_query = format!("scsearch1:{} {}", resolved_title, resolved_uploader);
-                    println!("[stream] Trying SoundCloud search fallback: {}", sc_query);
-                    let mut sc_fallback = Command::new(&yt_cmd);
-                    sc_fallback.args(["-g", "-f", "bestaudio/b"]);
-                    apply_yt_dlp_common_args(&mut sc_fallback);
-                    sc_fallback.arg(&sc_query);
-
-                    if let Ok(Ok(sc)) = tokio::time::timeout(std::time::Duration::from_secs(8), sc_fallback.output()).await {
-                        if sc.status.success() {
-                            let u = String::from_utf8_lossy(&sc.stdout).trim().to_string();
-                            if !u.is_empty() {
-                                direct_url = u;
-                            }
                         }
                     }
                 }
@@ -501,7 +651,6 @@ async fn stream_audio(
         }
     }
 
-    println!("[stream] Running ffmpeg with url length: {}", direct_url.len());
     ffmpeg_args.extend([
         "-i".to_string(),
         direct_url,
@@ -510,12 +659,15 @@ async fn stream_audio(
         "mp3".to_string(),
         "-b:a".to_string(),
         "192k".to_string(),
+        "-flush_packets".to_string(),
+        "1".to_string(),
         "pipe:1".to_string(),
     ]);
+
     let mut ffmpeg_child = match Command::new("ffmpeg")
         .args(&ffmpeg_args)
         .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
+        .stderr(Stdio::null())
         .spawn()
     {
         Ok(c) => c,
@@ -531,8 +683,7 @@ async fn stream_audio(
     };
 
     tokio::spawn(async move {
-        let status = ffmpeg_child.wait().await;
-        println!("[stream] FFmpeg exited with: {:?}", status);
+        let _ = ffmpeg_child.wait().await;
     });
 
     let stream = ReaderStream::new(stdout);
@@ -540,6 +691,7 @@ async fn stream_audio(
 
     let mut res_headers = HeaderMap::new();
     res_headers.insert(header::CONTENT_TYPE, "audio/mpeg".parse().unwrap());
+    res_headers.insert(header::ACCEPT_RANGES, "bytes".parse().unwrap());
     res_headers.insert(header::CACHE_CONTROL, "no-cache, no-store".parse().unwrap());
     res_headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, "*".parse().unwrap());
     res_headers.insert(header::ACCESS_CONTROL_EXPOSE_HEADERS, "*".parse().unwrap());
@@ -580,6 +732,7 @@ async fn main() {
     let app = Router::new()
         .route("/", get(|| async { "SIGNAL // Audio Backend is running" }))
         .route("/api/health", get(health_check))
+        .route("/api/cover", get(proxy_cover))
         .route("/api/search", get(search_music))
         .route("/api/extract", get(extract_info))
         .route("/api/stream", get(stream_audio))

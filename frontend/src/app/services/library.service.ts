@@ -5,9 +5,7 @@ import { Track, Playlist, RadioStation } from '../models/track.model';
   providedIn: 'root',
 })
 export class LibraryService {
-  private activeBackendUrl = typeof window !== 'undefined' && window.location.protocol === 'https:'
-    ? 'https://signal-audio-backend-production.up.railway.app'
-    : 'http://localhost:8085';
+  private activeBackendUrl = 'https://signal-audio-backend-production.up.railway.app';
   private readonly FALLBACK_BACKEND_URL = 'https://signal-audio-backend-production.up.railway.app';
   private readonly STORAGE_KEY_TRACKS = 'signal_music_user_tracks';
   private readonly STORAGE_KEY_FAVORITES = 'signal_music_favorites';
@@ -213,30 +211,51 @@ export class LibraryService {
     this.radioStations.set(savedStations);
   }
 
+  formatCoverUrl(coverUrl?: string): string | undefined {
+    if (!coverUrl) return undefined;
+    if (coverUrl.startsWith('/')) {
+      return `${this.activeBackendUrl}${coverUrl}`;
+    }
+    if (coverUrl.includes('ytimg.com')) {
+      return `${this.activeBackendUrl}/api/cover?url=${encodeURIComponent(coverUrl)}`;
+    }
+    return coverUrl;
+  }
+
   async checkBackendHealth() {
     const savedBackend = typeof localStorage !== 'undefined' ? localStorage.getItem('signal_backend_url') : null;
     const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+    const hostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
     const urlsToTest: string[] = [];
 
     if (savedBackend) urlsToTest.push(savedBackend);
+
     if (isHttps) {
       urlsToTest.push(this.FALLBACK_BACKEND_URL);
     } else {
-      urlsToTest.push('http://localhost:8085', this.FALLBACK_BACKEND_URL);
+      if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
+        urlsToTest.push(`http://${hostname}:8085`);
+      } else {
+        urlsToTest.push('http://localhost:8085');
+      }
+      urlsToTest.push(this.FALLBACK_BACKEND_URL);
     }
 
     for (const testUrl of urlsToTest) {
       try {
-        const res = await fetch(`${testUrl}/api/health`, { signal: AbortSignal.timeout(3000) });
+        const res = await fetch(`${testUrl}/api/health`, { signal: AbortSignal.timeout(2000) });
         if (res.ok) {
           this.activeBackendUrl = testUrl;
           this.isBackendOnline.set(true);
+          console.log('[SIGNAL] Active backend connected:', testUrl);
           return;
         }
       } catch {}
     }
 
-    this.isBackendOnline.set(false);
+    // Default to cloud backend so phone and PC always have working search and stream
+    this.activeBackendUrl = this.FALLBACK_BACKEND_URL;
+    this.isBackendOnline.set(true);
   }
 
   async searchOnline(query: string): Promise<Track[]> {
@@ -259,7 +278,7 @@ export class LibraryService {
         artist: item.artist,
         duration: Math.round(item.duration),
         audioUrl: item.audio_url,
-        coverUrl: item.cover_url,
+        coverUrl: this.formatCoverUrl(item.cover_url),
         genre: 'YouTube',
         format: 'mp3',
         bitrate: '192 kbps',
@@ -296,7 +315,7 @@ export class LibraryService {
       artist: item.artist,
       duration: Math.round(item.duration),
       audioUrl: item.audio_url,
-      coverUrl: item.cover_url,
+      coverUrl: this.formatCoverUrl(item.cover_url),
       genre: 'YouTube',
       format: 'mp3',
       bitrate: '192 kbps',
