@@ -938,46 +938,129 @@
 
               @if (extractedResult(); as res) {
                 <div class="extracted-result-box">
-                  <div class="extracted-header">
-                    <div class="extracted-header-info">
-                      <span class="extracted-badge font-mono">
-                        {{ res.playlistTitle ? 'ПЛЕЙЛИСТ' : 'АУДИОТРЕК' }}
-                      </span>
-                      <h4 class="extracted-title">{{ res.playlistTitle || res.tracks[0]?.title }}</h4>
-                      <p class="extracted-sub">{{ res.tracks.length }} треков найдено</p>
+                  @if (res.isRadioMix) {
+                    <div class="radio-mix-notice">
+                      <span class="notice-icon">⚡</span>
+                      <div class="notice-text">
+                        <strong>YouTube Radio Mix:</strong> YouTube прикрепил авто-микс рекомендаций. Вы можете сохранить видео как цельный трек/микс или перенести треки в отдельный плейлист.
+                      </div>
                     </div>
+                  }
 
-                    <div class="extracted-batch-actions">
-                      @if (res.playlistTitle || res.tracks.length > 1) {
-                        <button class="btn-import-pl" (click)="importAllExtractedTracks()">
-                          <span>Импортировать плейлист</span>
-                        </button>
-                      }
-                      <button class="btn-import-lib" (click)="addExtractedTracksToLibraryOnly()">
-                        <span>Добавить все в медиатеку</span>
+                  @if (res.mainVideo && res.tracks.length > 1) {
+                    <div class="extract-mode-toggle">
+                      <button 
+                        type="button"
+                        class="btn-mode-tab" 
+                        [class.active]="extractMode() === 'single'"
+                        (click)="extractMode.set('single')"
+                      >
+                        💽 Цельный микс / трек ({{ formatTime(res.mainVideo.duration) }})
+                      </button>
+                      <button 
+                        type="button"
+                        class="btn-mode-tab" 
+                        [class.active]="extractMode() === 'playlist'"
+                        (click)="extractMode.set('playlist')"
+                      >
+                        📑 Плейлист ({{ res.tracks.length }} треков)
                       </button>
                     </div>
-                  </div>
+                  }
 
-                  <div class="extracted-tracks-scroll">
-                    @for (t of res.tracks; track t.id) {
-                      <div class="extracted-track-row">
-                        @if (t.coverUrl) {
-                          <img [src]="t.coverUrl" alt="" class="ext-thumb" />
+                  @if (extractMode() === 'single' || res.tracks.length <= 1) {
+                    <div class="single-mix-card">
+                      <div class="mix-cover-wrap">
+                        @if (res.mainVideo?.coverUrl || res.tracks[0]?.coverUrl) {
+                          <img [src]="res.mainVideo?.coverUrl || res.tracks[0]?.coverUrl" alt="" class="mix-cover-img" />
+                        } @else {
+                          <div class="mix-cover-placeholder">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
+                              <polygon points="6 3 20 12 6 21 6 3"/>
+                            </svg>
+                          </div>
                         }
-                        <div class="ext-meta">
-                          <span class="ext-name">{{ t.title }}</span>
-                          <span class="ext-artist">{{ t.artist }} • <span class="font-mono">{{ formatTime(t.duration) }}</span></span>
-                        </div>
-                        <button class="btn-ext-play" (click)="playExtractedTrackNow(t)">
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                      </div>
+                      <div class="mix-info">
+                        <span class="mix-badge font-mono">
+                          {{ (res.mainVideo?.duration || 0) > 600 ? 'ЦЕЛЬНЫЙ МИКС / СБОРНИК' : 'АУДИОТРЕК' }}
+                        </span>
+                        <h4 class="mix-title">{{ res.mainVideo?.title || res.tracks[0]?.title }}</h4>
+                        <p class="mix-artist">{{ res.mainVideo?.artist || res.tracks[0]?.artist }} • <span class="font-mono">{{ formatTime(res.mainVideo?.duration || res.tracks[0]?.duration || 0) }}</span></p>
+                      </div>
+                      <div class="mix-actions">
+                        <button type="button" class="btn-mix-primary" (click)="addExtractedSingleTrack(false)">
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                          </svg>
+                          <span>Сохранить в медиатеку</span>
+                        </button>
+                        <button type="button" class="btn-mix-secondary" (click)="addExtractedSingleTrack(true)">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                             <polygon points="6 3 20 12 6 21 6 3"/>
                           </svg>
-                          <span>Слушать</span>
+                          <span>Слушать сразу</span>
                         </button>
                       </div>
-                    }
-                  </div>
+                    </div>
+                  } @else {
+                    <div class="extracted-playlist-view">
+                      <div class="extracted-header">
+                        <div class="extracted-header-info">
+                          <span class="extracted-badge font-mono">
+                            {{ res.hasChapters ? 'ГЛАВЫ / ТАЙМКОДЫ ВИДЕО' : (res.isRadioMix ? 'МИКС YOUTUBE' : 'ПЛЕЙЛИСТ') }}
+                          </span>
+                          <h4 class="extracted-title">{{ res.playlistTitle || res.mainVideo?.title || 'Плейлист' }}</h4>
+                          <p class="extracted-sub">
+                            Выбрано {{ selectedExtractedTrackIds().size }} из {{ res.tracks.length }} треков
+                          </p>
+                        </div>
+
+                        <div class="extracted-batch-actions">
+                          <button type="button" class="btn-select-all" (click)="toggleSelectAllExtractedTracks()">
+                            {{ selectedExtractedTrackIds().size === res.tracks.length ? 'Снять все' : 'Выбрать все' }}
+                          </button>
+                          <button type="button" class="btn-import-pl" (click)="importAllExtractedTracks(true)">
+                            <span>Создать плейлист ({{ selectedExtractedTrackIds().size }})</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      <div class="extracted-tracks-scroll">
+                        @for (t of res.tracks; track t.id) {
+                          <div 
+                            class="extracted-track-row" 
+                            [class.deselected]="!selectedExtractedTrackIds().has(t.id)"
+                            (click)="toggleSelectExtractedTrack(t.id)"
+                          >
+                            <div class="ext-checkbox">
+                              @if (selectedExtractedTrackIds().has(t.id)) {
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5">
+                                  <polyline points="20 6 9 17 4 12"/>
+                                </svg>
+                              } @else {
+                                <div class="unchecked-box"></div>
+                              }
+                            </div>
+
+                            @if (t.coverUrl) {
+                              <img [src]="t.coverUrl" alt="" class="ext-thumb" />
+                            }
+                            <div class="ext-meta">
+                              <span class="ext-name">{{ t.title }}</span>
+                              <span class="ext-artist">{{ t.artist }} • <span class="font-mono">{{ formatTime(t.duration) }}</span></span>
+                            </div>
+                            <button type="button" class="btn-ext-play" (click)="$event.stopPropagation(); playExtractedTrackNow(t)">
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                                <polygon points="6 3 20 12 6 21 6 3"/>
+                              </svg>
+                              <span>Слушать</span>
+                            </button>
+                          </div>
+                        }
+                      </div>
+                    </div>
+                  }
                 </div>
               }
             </div>

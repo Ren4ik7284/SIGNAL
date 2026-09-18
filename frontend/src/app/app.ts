@@ -10,7 +10,7 @@ import {
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AudioService } from './services/audio.service';
-import { LibraryService } from './services/library.service';
+import { LibraryService, ExtractedResult } from './services/library.service';
 import { Track, Playlist, RadioStation } from './models/track.model';
 import { HeaderComponent } from './components/header/header.component';
 import { SidebarComponent } from './components/sidebar/sidebar.component';
@@ -58,7 +58,9 @@ export class App implements OnInit {
 
   readonly youtubeUrlInput = signal<string>('');
   readonly isExtractingUrl = signal<boolean>(false);
-  readonly extractedResult = signal<{ playlistTitle: string | null; tracks: Track[] } | null>(null);
+  readonly extractedResult = signal<ExtractedResult | null>(null);
+  readonly extractMode = signal<'single' | 'playlist'>('single');
+  readonly selectedExtractedTrackIds = signal<Set<string>>(new Set());
   readonly extractError = signal<string | null>(null);
 
   readonly radioSearchInput = signal<string>('');
@@ -341,10 +343,16 @@ export class App implements OnInit {
 
     try {
       const res = await this.libraryService.extractFromUrl(url);
-      if (!res.tracks || res.tracks.length === 0) {
+      if ((!res.tracks || res.tracks.length === 0) && !res.mainVideo) {
         this.extractError.set('Не удалось извлечь аудио по этой ссылке. Проверьте URL.');
       } else {
         this.extractedResult.set(res);
+        if (res.mainVideo && (res.isRadioMix || res.mainVideo.duration > 600 || res.tracks.length <= 1)) {
+          this.extractMode.set('single');
+        } else {
+          this.extractMode.set('playlist');
+        }
+        this.selectedExtractedTrackIds.set(new Set(res.tracks.map((t) => t.id)));
       }
     } catch {
       this.extractError.set('Ошибка соединения с бэкендом. Убедитесь, что бэкенд запущен.');
@@ -353,13 +361,66 @@ export class App implements OnInit {
     }
   }
 
-  importAllExtractedTracks() {
+  addExtractedSingleTrack(playNow = false) {
+    const data = this.extractedResult();
+    const track = data?.mainVideo || data?.tracks[0];
+    if (!track) return;
+
+    this.libraryService.addTrackToLibrary(track);
+    if (playNow) {
+      this.audioService.playTrack(track, this.libraryService.tracks());
+      this.showToast(`Воспроизведение: ${track.title}`);
+    } else {
+      this.showToast(`Трек/микс "${track.title}" сохранен в медиатеку`);
+    }
+
+    this.isAddModalOpen.set(false);
+    this.youtubeUrlInput.set('');
+    this.extractedResult.set(null);
+  }
+
+  toggleSelectExtractedTrack(trackId: string) {
+    this.selectedExtractedTrackIds.update((set) => {
+      const next = new Set(set);
+      if (next.has(trackId)) {
+        next.delete(trackId);
+      } else {
+        next.add(trackId);
+      }
+      return next;
+    });
+  }
+
+  toggleSelectAllExtractedTracks() {
+    const data = this.extractedResult();
+    if (!data) return;
+    const allIds = data.tracks.map((t) => t.id);
+    const current = this.selectedExtractedTrackIds();
+    if (current.size === allIds.length) {
+      this.selectedExtractedTrackIds.set(new Set());
+    } else {
+      this.selectedExtractedTrackIds.set(new Set(allIds));
+    }
+  }
+
+  importAllExtractedTracks(onlySelected = false) {
     const data = this.extractedResult();
     if (!data || data.tracks.length === 0) return;
 
-    const title = data.playlistTitle || 'YouTube Плейлист';
-    const createdPl = this.libraryService.importPlaylist(title, data.tracks);
-    this.showToast(`Создан плейлист "${title}" (${data.tracks.length} треков)`);
+    let tracksToImport = data.tracks;
+    if (onlySelected) {
+      const selected = this.selectedExtractedTrackIds();
+      tracksToImport = data.tracks.filter((t) => selected.has(t.id));
+    }
+
+    if (tracksToImport.length === 0) {
+      this.showToast('Выберите хотя бы один трек для импорта');
+      return;
+    }
+
+    const title = data.playlistTitle || data.mainVideo?.title || 'YouTube Плейлист';
+    const createdPl = this.libraryService.importPlaylist(title, tracksToImport);
+    this.showToast(`Создан плейлист "${title}" (${tracksToImport.length} треков)`);
     this.isAddModalOpen.set(false);
     this.youtubeUrlInput.set('');
     this.extractedResult.set(null);
@@ -370,8 +431,11 @@ export class App implements OnInit {
     const data = this.extractedResult();
     if (!data || data.tracks.length === 0) return;
 
-    this.libraryService.addMultipleTracks(data.tracks);
-    this.showToast(`Добавлено ${data.tracks.length} треков в медиатеку`);
+    const selected = this.selectedExtractedTrackIds();
+    const tracksToAdd = selected.size > 0 ? data.tracks.filter((t) => selected.has(t.id)) : data.tracks;
+
+    this.libraryService.addMultipleTracks(tracksToAdd);
+    this.showToast(`Добавлено ${tracksToAdd.length} треков в медиатеку`);
     this.isAddModalOpen.set(false);
     this.youtubeUrlInput.set('');
     this.extractedResult.set(null);

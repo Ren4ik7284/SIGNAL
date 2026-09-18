@@ -70,6 +70,26 @@ pub async fn search_music(Query(params): Query<SearchParams>) -> Result<Json<Vec
     Ok(Json(combined))
 }
 
+fn extract_video_id(url: &str) -> Option<String> {
+    if let Some(idx) = url.find("v=") {
+        let rest = &url[idx + 2..];
+        let end = rest.find(['&', '?', '#', '/']).unwrap_or(rest.len());
+        let id = &rest[..end];
+        if !id.is_empty() && id.len() <= 20 {
+            return Some(id.to_string());
+        }
+    }
+    if let Some(idx) = url.find("youtu.be/") {
+        let rest = &url[idx + 9..];
+        let end = rest.find(['&', '?', '#', '/']).unwrap_or(rest.len());
+        let id = &rest[..end];
+        if !id.is_empty() && id.len() <= 20 {
+            return Some(id.to_string());
+        }
+    }
+    None
+}
+
 pub async fn extract_info(Query(params): Query<ExtractParams>) -> Result<Json<ExtractResponse>, StatusCode> {
     let url = params.url.trim();
     if url.is_empty() {
@@ -78,6 +98,80 @@ pub async fn extract_info(Query(params): Query<ExtractParams>) -> Result<Json<Ex
 
     let yt_cmd = get_yt_dlp_cmd();
     let base_url = get_base_url();
+    let is_radio_mix = url.contains("list=RD") || url.contains("list=UL");
+    let video_id_opt = extract_video_id(url);
+
+    let mut main_video: Option<SearchTrack> = None;
+    let mut chapter_tracks: Vec<SearchTrack> = Vec::new();
+    let mut has_chapters = false;
+
+    // 1. If URL has a specific video, inspect it first (fast single-video lookup)
+    if let Some(ref vid) = video_id_opt {
+        let single_url = format!("https://www.youtube.com/watch?v={}", vid);
+        let mut single_cmd = Command::new(&yt_cmd);
+        apply_yt_dlp_common_args(&mut single_cmd);
+        single_cmd.args([
+            &single_url,
+            "--dump-json",
+            "--no-playlist",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+
+        if let Ok(Ok(out)) = tokio::time::timeout(Duration::from_secs(10), single_cmd.output()).await {
+            if out.status.success() {
+                if let Ok(item) = serde_json::from_slice::<serde_json::Value>(&out.stdout) {
+                    main_video = parse_track_json(&item, &base_url);
+
+                    // Check for video chapters (sub-tracks / timestamps)
+                    if let Some(chapters) = item["chapters"].as_array() {
+                        if !chapters.is_empty() {
+                            for (i, ch) in chapters.iter().enumerate() {
+                                let ch_title = ch["title"].as_str().unwrap_or("Без названия").trim();
+                                let start_time = ch["start_time"].as_f64().unwrap_or(0.0);
+                                let end_time = ch["end_time"].as_f64().unwrap_or(start_time);
+                                let ch_duration = if end_time > start_time { end_time - start_time } else { 0.0 };
+
+                                let ch_id = format!("{}_ch_{}", vid, i + 1);
+                                let ch_audio_url = format!("{}/api/stream?url={}&ss={}", base_url, urlencoding::encode(&single_url), start_time as u64);
+                                let ch_artist = main_video.as_ref().map(|m| m.artist.clone()).unwrap_or_else(|| "Разные исполнители".to_string());
+                                let ch_cover = main_video.as_ref().and_then(|m| m.cover_url.clone());
+
+                                chapter_tracks.push(SearchTrack {
+                                    id: ch_id,
+                                    title: ch_title.to_string(),
+                                    artist: ch_artist,
+                                    duration: ch_duration,
+                                    audio_url: ch_audio_url,
+                                    cover_url: ch_cover,
+                                });
+                            }
+                            if !chapter_tracks.is_empty() {
+                                has_chapters = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Determine tracks to return:
+    // If video has chapters, chapter_tracks ARE the playlist tracks!
+    if has_chapters && !chapter_tracks.is_empty() {
+        let playlist_title = main_video.as_ref().map(|m| m.title.clone());
+        return Ok(Json(ExtractResponse {
+            playlist_title,
+            tracks: chapter_tracks,
+            main_video,
+            is_radio_mix,
+            has_chapters: true,
+        }));
+    }
+
+    // 3. Regular playlist extraction if URL has a playlist or if chapter extraction wasn't used
+    let mut tracks = Vec::new();
+    let mut playlist_title = None;
 
     let mut cmd = Command::new(&yt_cmd);
     apply_yt_dlp_common_args(&mut cmd);
@@ -91,40 +185,37 @@ pub async fn extract_info(Query(params): Query<ExtractParams>) -> Result<Json<Ex
     .stdout(Stdio::piped())
     .stderr(Stdio::null());
 
-    let mut child = match cmd.spawn() {
-        Ok(c) => c,
-        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
-    };
+    if let Ok(mut child) = cmd.spawn() {
+        if let Some(stdout) = child.stdout.take() {
+            let mut reader = tokio::io::BufReader::new(stdout).lines();
+            let read_task = async {
+                while let Ok(Some(line)) = reader.next_line().await {
+                    if let Ok(item) = serde_json::from_str::<serde_json::Value>(&line) {
+                        if playlist_title.is_none() {
+                            if let Some(title) = item["playlist_title"].as_str() {
+                                playlist_title = Some(title.to_string());
+                            } else if let Some(title) = item["playlist"].as_str() {
+                                playlist_title = Some(title.to_string());
+                            }
+                        }
 
-    let stdout = match child.stdout.take() {
-        Some(s) => s,
-        None => return Err(StatusCode::INTERNAL_SERVER_ERROR),
-    };
-
-    let mut reader = tokio::io::BufReader::new(stdout).lines();
-    let mut tracks = Vec::new();
-    let mut playlist_title = None;
-
-    let read_task = async {
-        while let Ok(Some(line)) = reader.next_line().await {
-            if let Ok(item) = serde_json::from_str::<serde_json::Value>(&line) {
-                if playlist_title.is_none() {
-                    if let Some(title) = item["playlist_title"].as_str() {
-                        playlist_title = Some(title.to_string());
-                    } else if let Some(title) = item["playlist"].as_str() {
-                        playlist_title = Some(title.to_string());
+                        if let Some(track) = parse_track_json(&item, &base_url) {
+                            tracks.push(track);
+                        }
                     }
                 }
-
-                if let Some(track) = parse_track_json(&item, &base_url) {
-                    tracks.push(track);
-                }
-            }
+            };
+            let _ = tokio::time::timeout(Duration::from_secs(25), read_task).await;
+            let _ = child.kill().await;
         }
-    };
+    }
 
-    let _ = tokio::time::timeout(Duration::from_secs(25), read_task).await;
-    let _ = child.kill().await;
+    // If tracks were empty but we have main_video (e.g. single video URL), use main_video as the track
+    if tracks.is_empty() {
+        if let Some(ref mv) = main_video {
+            tracks.push(mv.clone());
+        }
+    }
 
     // Fallback to cloud extract if local extraction yielded 0 items
     if tracks.is_empty() && !is_cloud_env() {
@@ -140,6 +231,12 @@ pub async fn extract_info(Query(params): Query<ExtractParams>) -> Result<Json<Ex
                                     t.audio_url = format!("{}{}", base_url, &t.audio_url[stream_idx..]);
                                 }
                             }
+                            if let Some(ref mut mv) = ext_resp.main_video {
+                                if mv.audio_url.contains("/api/stream") {
+                                    let stream_idx = mv.audio_url.find("/api/stream").unwrap();
+                                    mv.audio_url = format!("{}{}", base_url, &mv.audio_url[stream_idx..]);
+                                }
+                            }
                             return Ok(Json(ext_resp));
                         }
                     }
@@ -148,8 +245,23 @@ pub async fn extract_info(Query(params): Query<ExtractParams>) -> Result<Json<Ex
         }
     }
 
+    // If main_video is still missing, but tracks has items and URL has a video_id, find it in tracks or use first track
+    if main_video.is_none() && !tracks.is_empty() {
+        if let Some(ref vid) = video_id_opt {
+            if let Some(found) = tracks.iter().find(|t| t.id == *vid) {
+                main_video = Some(found.clone());
+            }
+        }
+        if main_video.is_none() && !url.contains("list=") {
+            main_video = tracks.first().cloned();
+        }
+    }
+
     Ok(Json(ExtractResponse {
         playlist_title,
         tracks,
+        main_video,
+        is_radio_mix,
+        has_chapters,
     }))
 }

@@ -2,6 +2,14 @@ import { Injectable, signal, computed, inject } from '@angular/core';
 import { Track, Playlist, RadioStation } from '../models/track.model';
 import { OfflineService } from './offline.service';
 
+export interface ExtractedResult {
+  playlistTitle: string | null;
+  tracks: Track[];
+  mainVideo?: Track | null;
+  isRadioMix?: boolean;
+  hasChapters?: boolean;
+}
+
 @Injectable({
   providedIn: 'root',
 })
@@ -396,7 +404,7 @@ export class LibraryService {
     }
   }
 
-  async extractFromUrl(url: string): Promise<{ playlistTitle: string | null; tracks: Track[] }> {
+  async extractFromUrl(url: string): Promise<ExtractedResult> {
     const targetUrl = url.trim();
     if (!targetUrl) return { playlistTitle: null, tracks: [] };
 
@@ -406,6 +414,9 @@ export class LibraryService {
     const data: {
       playlist_title: string | null;
       tracks: { id: string; title: string; artist: string; duration: number; audio_url: string; cover_url?: string }[];
+      main_video?: { id: string; title: string; artist: string; duration: number; audio_url: string; cover_url?: string } | null;
+      is_radio_mix?: boolean;
+      has_chapters?: boolean;
     } = await res.json();
 
     const seenIds = new Set<string>();
@@ -432,9 +443,30 @@ export class LibraryService {
       });
     }
 
+    let mainVideo: Track | null = null;
+    if (data.main_video) {
+      mainVideo = {
+        id: 'yt-' + data.main_video.id,
+        title: data.main_video.title,
+        artist: data.main_video.artist,
+        duration: Math.round(data.main_video.duration),
+        audioUrl: data.main_video.audio_url,
+        coverUrl: this.formatCoverUrl(data.main_video.cover_url),
+        genre: 'YouTube Mix',
+        format: 'mp3',
+        bitrate: '192 kbps',
+        plays: 0,
+        isFavorite: false,
+        addedAt: new Date().toISOString().split('T')[0],
+      };
+    }
+
     return {
       playlistTitle: data.playlist_title,
       tracks,
+      mainVideo,
+      isRadioMix: !!data.is_radio_mix,
+      hasChapters: !!data.has_chapters,
     };
   }
 

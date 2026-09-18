@@ -36,4 +36,10 @@ pub struct SearchTrack {
 pub struct ExtractResponse {
     pub playlist_title: Option<String>,
     pub tracks: Vec<SearchTrack>,
+    #[serde(default)]
+    pub main_video: Option<SearchTrack>,
+    #[serde(default)]
+    pub is_radio_mix: bool,
+    #[serde(default)]
+    pub has_chapters: bool,
 }
