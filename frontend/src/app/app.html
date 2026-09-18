@@ -49,6 +49,17 @@
     </div>
 
     <div class="header-actions">
+      @if (isMobileDevice() && canInstallPwa()) {
+        <button class="btn-pwa-install font-mono" (click)="installPwa()" title="Установить на телефон">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          <span>PWA</span>
+        </button>
+      }
+
       <div class="backend-status-pill font-mono" [class.online]="libraryService.isBackendOnline()" title="Статус Rust бэкенда">
         <span class="backend-dot"></span>
         <span>{{ libraryService.isBackendOnline() ? 'RUST ENGINE' : 'OFFLINE' }}</span>
@@ -66,7 +77,7 @@
 
   <div class="app-body">
     
-    <!-- Sidebar (Desktop) -->
+    
     <aside class="app-sidebar">
       <div class="sidebar-section">
         <div class="section-label">ИСТОЧНИКИ</div>
@@ -193,11 +204,11 @@
       </div>
     </aside>
 
-    <!-- Main Content Area -->
+    
     <main class="app-main">
       <div class="view-container">
         
-        <!-- View Header -->
+        
         <div class="view-header">
           <div>
             @if (activeTab() === 'playlist' && currentPlaylist(); as pl) {
@@ -238,7 +249,7 @@
             }
           </div>
 
-          <!-- Genre Filter Row (for regular music tabs) -->
+          
           @if (activeTab() !== 'playlist' && activeTab() !== 'streams' && libraryService.availableGenres().length > 1) {
             <div class="genre-filter-row">
               @for (g of libraryService.availableGenres(); track g) {
@@ -254,7 +265,7 @@
           }
         </div>
 
-        <!-- SPECIAL VIEW: RADIO STATIONS -->
+        
         @if (activeTab() === 'streams') {
           <div class="radio-section-wrap">
             <div class="radio-toolbar">
@@ -293,7 +304,7 @@
               </div>
             </div>
 
-            <!-- Radio Browser Search Results -->
+            
             @if (radioSearchResults().length > 0) {
               <div class="radio-search-results-block">
                 <div class="block-title font-mono">РЕЗУЛЬТАТЫ ПОИСКА ({{ radioSearchResults().length }})</div>
@@ -329,7 +340,7 @@
               </div>
             }
 
-            <!-- Saved Radio Stations Grid -->
+            
             <div class="my-stations-block">
               <div class="block-title font-mono">МОИ РАДИОСТАНЦИИ ({{ libraryService.radioStations().length }})</div>
               <div class="radio-grid">
@@ -367,10 +378,10 @@
           </div>
         }
 
-        <!-- TRACKS LIST (Desktop Table + Mobile Cards) -->
+        
         @if (activeTab() !== 'streams' && libraryService.filteredTracks().length > 0) {
           
-          <!-- Desktop Table View -->
+          
           <div class="tracks-table-wrapper desktop-only">
             <table class="tracks-table">
               <thead>
@@ -498,7 +509,7 @@
             </table>
           </div>
 
-          <!-- Mobile Cards View (Optimized for Phones) -->
+          
           <div class="mobile-tracks-list mobile-only">
             @for (track of libraryService.filteredTracks(); track track.id; let i = $index) {
               <div 
@@ -575,7 +586,7 @@
           </div>
         } @else if (activeTab() !== 'streams') {
           
-          <!-- Empty State -->
+          
           <div class="empty-state-card">
             <div class="empty-box-hero">
               <div class="empty-icon-wrap">
@@ -612,10 +623,10 @@
     </main>
   </div>
 
-  <!-- Player Bar (Desktop + Mobile Mini Player) -->
+  
   <footer class="app-player-bar">
     
-    <!-- Left: Now Playing Info (Tap on mobile opens full player) -->
+    
     <div class="player-left" (click)="isMobilePlayerExpanded.set(true)">
       <div class="now-playing-cover">
         @if (audioService.currentTrack()?.coverUrl) {
@@ -647,7 +658,7 @@
       }
     </div>
 
-    <!-- Center: Controls & Scrubber -->
+    
     <div class="player-center">
       <div class="player-buttons">
         <button class="ctrl-btn desktop-only" [class.active]="audioService.isShuffle()" (click)="audioService.toggleShuffle()" title="Перемешать">
@@ -719,7 +730,7 @@
       </div>
     </div>
 
-    <!-- Right: Volume & Queue (Desktop) -->
+    
     <div class="player-right desktop-only">
       <div class="volume-group">
         <button class="utility-btn" (click)="audioService.toggleMute()" title="Громкость">
@@ -760,11 +771,11 @@
       </button>
     </div>
 
-    <!-- Mobile Mini Progress Indicator -->
+    
     <div class="mobile-mini-scrubber mobile-only" [style.width.%]="audioService.progressPercent()"></div>
   </footer>
 
-  <!-- Mobile Bottom Navigation Bar -->
+  
   <nav class="mobile-bottom-nav mobile-only">
     <button class="m-nav-item" [class.active]="activeTab() === 'all'" (click)="setView('all')">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -803,7 +814,7 @@
     </button>
   </nav>
 
-  <!-- Mobile Fullscreen Player Sheet -->
+  
   @if (isMobilePlayerExpanded() && audioService.currentTrack(); as cur) {
     <div class="mobile-player-sheet">
       <div class="sheet-top-bar">
@@ -933,7 +944,7 @@
     </div>
   }
 
-  <!-- Mobile Playlists Bottom Sheet -->
+  
   @if (isMobilePlaylistsOpen()) {
     <div class="modal-backdrop" (click)="isMobilePlaylistsOpen.set(false)">
       <div class="modal-dialog mobile-playlists-sheet" (click)="$event.stopPropagation()">
@@ -959,6 +970,16 @@
           }
         </div>
         <div class="modal-footer mobile-backup-row">
+          @if (isMobileDevice()) {
+            <button class="btn-pwa-banner font-mono" (click)="installPwa()">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect width="14" height="20" x="5" y="2" rx="2" ry="2"/>
+                <line x1="12" y1="18" x2="12.01" y2="18"/>
+              </svg>
+              <span>Установить приложение на телефон</span>
+            </button>
+          }
+
           <div class="mobile-sync-badge font-mono" [class.synced]="libraryService.isCloudSynced()">
             <span class="sync-dot"></span>
             <span>{{ libraryService.isCloudSynced() ? 'Облако синхронизировано' : 'Синхронизация...' }}</span>
@@ -983,7 +1004,7 @@
     </div>
   }
 
-  <!-- Queue Drawer -->
+  
   @if (isQueueDrawerOpen()) {
     <div class="drawer-backdrop" (click)="isQueueDrawerOpen.set(false)">
       <div class="drawer-panel" (click)="$event.stopPropagation()">
@@ -1035,7 +1056,7 @@
     </div>
   }
 
-  <!-- Add Music Modal -->
+  
   @if (isAddModalOpen()) {
     <div class="modal-backdrop" (click)="isAddModalOpen.set(false)">
       <div class="modal-dialog add-music-dialog" (click)="$event.stopPropagation()">
@@ -1110,7 +1131,7 @@
 
         <div class="modal-body">
           
-          <!-- TAB: YOUTUBE & PLAYLISTS -->
+          
           @if (addModalTab() === 'youtube') {
             <div class="tab-youtube-content">
               <div class="input-field">
@@ -1191,7 +1212,7 @@
             </div>
           }
 
-          <!-- TAB: SEARCH ONLINE -->
+          
           @if (addModalTab() === 'search') {
             <div class="tab-online-search">
               <div class="online-search-bar">
@@ -1267,7 +1288,7 @@
             </div>
           }
 
-          <!-- TAB: RADIO -->
+          
           @if (addModalTab() === 'radio') {
             <div class="tab-presets-content">
               <div class="radio-modal-top">
@@ -1295,7 +1316,7 @@
             </div>
           }
 
-          <!-- TAB: DIRECT URL -->
+          
           @if (addModalTab() === 'url') {
             <div class="tab-url-content">
               <div class="input-field">
@@ -1344,7 +1365,7 @@
             </div>
           }
 
-          <!-- TAB: LOCAL FILE -->
+          
           @if (addModalTab() === 'file') {
             <div class="tab-file-content">
               <div 
@@ -1408,7 +1429,7 @@
     </div>
   }
 
-  <!-- Add Custom Radio Station Modal -->
+  
   @if (isAddStationModalOpen()) {
     <div class="modal-backdrop" (click)="isAddStationModalOpen.set(false)">
       <div class="modal-dialog station-modal" (click)="$event.stopPropagation()">
@@ -1467,7 +1488,7 @@
     </div>
   }
 
-  <!-- Playlist Create Modal -->
+  
   @if (isPlaylistModalOpen()) {
     <div class="modal-backdrop" (click)="isPlaylistModalOpen.set(false)">
       <div class="modal-dialog playlist-modal" (click)="$event.stopPropagation()">
@@ -1517,7 +1538,7 @@
     </div>
   }
 
-  <!-- Toast Notification -->
+  
   @if (toastMessage()) {
     <div class="system-toast font-mono">
       <span class="toast-dot"></span>

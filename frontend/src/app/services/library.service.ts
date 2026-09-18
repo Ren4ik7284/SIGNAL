@@ -253,7 +253,6 @@ export class LibraryService {
       } catch {}
     }
 
-    // Default to cloud backend so phone and PC always have working search and stream
     this.activeBackendUrl = this.FALLBACK_BACKEND_URL;
     this.isBackendOnline.set(true);
   }

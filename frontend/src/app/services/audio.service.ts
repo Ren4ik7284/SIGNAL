@@ -47,12 +47,15 @@ export class AudioService {
     this.audio.volume = this.volume();
 
     this.setupEventListeners();
+    this.setupMediaSession();
   }
 
   private setupEventListeners() {
     this.audio.addEventListener('timeupdate', () => {
       const actual = this.streamSeekOffset() + this.audio.currentTime;
       this.currentTime.set(actual);
+
+      this.updateMediaSessionPosition();
 
       const total = this.duration();
       if (total > 0 && actual >= total - 0.5 && this.isPlaying()) {
@@ -67,6 +70,7 @@ export class AudioService {
       } else if (this.currentTrack()?.duration && this.currentTrack()!.duration > 0) {
         this.duration.set(this.currentTrack()!.duration);
       }
+      this.updateMediaSessionPosition();
     });
 
     this.audio.addEventListener('durationchange', () => {
@@ -76,24 +80,108 @@ export class AudioService {
       } else if (this.currentTrack()?.duration && this.currentTrack()!.duration > 0) {
         this.duration.set(this.currentTrack()!.duration);
       }
+      this.updateMediaSessionPosition();
     });
 
     this.audio.addEventListener('play', () => {
       this.isPlaying.set(true);
+      if (typeof window !== 'undefined' && 'mediaSession' in navigator) {
+        navigator.mediaSession.playbackState = 'playing';
+      }
     });
 
     this.audio.addEventListener('pause', () => {
       this.isPlaying.set(false);
+      if (typeof window !== 'undefined' && 'mediaSession' in navigator) {
+        navigator.mediaSession.playbackState = 'paused';
+      }
     });
 
     this.audio.addEventListener('ended', () => {
       this.handleTrackEnded();
     });
 
-    this.audio.addEventListener('error', (e) => {
-      console.warn('Playback notice:', e);
+    this.audio.addEventListener('error', () => {
       this.isPlaying.set(false);
     });
+  }
+
+  private setupMediaSession() {
+    if (typeof window === 'undefined' || !('mediaSession' in navigator)) return;
+
+    try {
+      navigator.mediaSession.setActionHandler('play', () => {
+        this.togglePlay();
+      });
+      navigator.mediaSession.setActionHandler('pause', () => {
+        this.togglePlay();
+      });
+      navigator.mediaSession.setActionHandler('previoustrack', () => {
+        this.prev();
+      });
+      navigator.mediaSession.setActionHandler('nexttrack', () => {
+        this.next();
+      });
+      navigator.mediaSession.setActionHandler('seekto', (details) => {
+        if (details.seekTime !== undefined && details.seekTime !== null) {
+          this.seek(details.seekTime);
+        }
+      });
+      navigator.mediaSession.setActionHandler('seekbackward', (details) => {
+        this.skipBy(-(details.seekOffset || 10));
+      });
+      navigator.mediaSession.setActionHandler('seekforward', (details) => {
+        this.skipBy(details.seekOffset || 10);
+      });
+      navigator.mediaSession.setActionHandler('stop', () => {
+        this.audio.pause();
+        this.isPlaying.set(false);
+      });
+    } catch {}
+  }
+
+  private updateMediaSessionMetadata(track: Track) {
+    if (typeof window === 'undefined' || !('mediaSession' in navigator)) return;
+
+    try {
+      const artwork = track.coverUrl
+        ? [
+            { src: track.coverUrl, sizes: '96x96', type: 'image/jpeg' },
+            { src: track.coverUrl, sizes: '128x128', type: 'image/jpeg' },
+            { src: track.coverUrl, sizes: '192x192', type: 'image/jpeg' },
+            { src: track.coverUrl, sizes: '256x256', type: 'image/jpeg' },
+            { src: track.coverUrl, sizes: '384x384', type: 'image/jpeg' },
+            { src: track.coverUrl, sizes: '512x512', type: 'image/jpeg' }
+          ]
+        : [
+            { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+            { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' }
+          ];
+
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: track.title,
+        artist: track.artist || 'SIGNAL',
+        album: 'SIGNAL Audio',
+        artwork: artwork
+      });
+    } catch {}
+  }
+
+  private updateMediaSessionPosition() {
+    if (typeof window === 'undefined' || !('mediaSession' in navigator)) return;
+    if (!('setPositionState' in navigator.mediaSession)) return;
+
+    const d = this.duration();
+    if (!d || d <= 0 || !isFinite(d) || this.isLiveStream()) return;
+
+    try {
+      const pos = Math.max(0, Math.min(this.currentTime(), d));
+      navigator.mediaSession.setPositionState({
+        duration: d,
+        playbackRate: this.audio.playbackRate || 1,
+        position: pos
+      });
+    } catch {}
   }
 
   playTrack(track: Track, newQueue?: Track[]) {
@@ -119,6 +207,8 @@ export class AudioService {
     const initialDuration = track.duration && track.duration > 0 ? track.duration : 0;
     this.duration.set(initialDuration);
 
+    this.updateMediaSessionMetadata(track);
+
     let playUrl = track.audioUrl;
     if (playUrl.startsWith('/api/stream')) {
       playUrl = `${this.libraryService.getBackendUrl()}${playUrl}`;
@@ -138,9 +228,11 @@ export class AudioService {
       .play()
       .then(() => {
         this.isPlaying.set(true);
+        if (typeof window !== 'undefined' && 'mediaSession' in navigator) {
+          navigator.mediaSession.playbackState = 'playing';
+        }
       })
-      .catch((err) => {
-        console.warn('Auto-play blocked or network delay:', err);
+      .catch(() => {
         this.isPlaying.set(false);
       });
   }
@@ -155,10 +247,21 @@ export class AudioService {
     }
 
     if (this.audio.paused) {
-      this.audio.play().then(() => this.isPlaying.set(true)).catch(() => {});
+      this.audio
+        .play()
+        .then(() => {
+          this.isPlaying.set(true);
+          if (typeof window !== 'undefined' && 'mediaSession' in navigator) {
+            navigator.mediaSession.playbackState = 'playing';
+          }
+        })
+        .catch(() => {});
     } else {
       this.audio.pause();
       this.isPlaying.set(false);
+      if (typeof window !== 'undefined' && 'mediaSession' in navigator) {
+        navigator.mediaSession.playbackState = 'paused';
+      }
     }
   }
 
@@ -190,10 +293,9 @@ export class AudioService {
       try {
         this.audio.currentTime = clamped;
         this.currentTime.set(clamped);
-      } catch (err) {
-        console.warn('Seek error:', err);
-      }
+      } catch {}
     }
+    this.updateMediaSessionPosition();
   }
 
   seekPercent(percent: number) {

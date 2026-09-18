@@ -33,6 +33,10 @@ export class App implements OnInit {
   readonly isMobilePlayerExpanded = signal<boolean>(false);
   readonly isMobilePlaylistsOpen = signal<boolean>(false);
 
+  readonly isMobileDevice = signal<boolean>(false);
+  readonly canInstallPwa = signal<boolean>(false);
+  private deferredPrompt: any = null;
+
   readonly modalSearchInput = signal<string>('');
 
   readonly currentPlaylist = computed(() => {
@@ -95,6 +99,38 @@ export class App implements OnInit {
 
   ngOnInit() {
     this.libraryService.checkBackendHealth();
+
+    if (typeof window !== 'undefined') {
+      const isMobile = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
+      this.isMobileDevice.set(isMobile);
+
+      window.addEventListener('beforeinstallprompt', (e: Event) => {
+        if (isMobile) {
+          e.preventDefault();
+          this.deferredPrompt = e;
+          this.canInstallPwa.set(true);
+        } else {
+          e.preventDefault();
+          this.deferredPrompt = null;
+          this.canInstallPwa.set(false);
+        }
+      });
+    }
+  }
+
+  installPwa() {
+    if (this.deferredPrompt) {
+      this.deferredPrompt.prompt();
+      this.deferredPrompt.userChoice.then((choice: any) => {
+        if (choice && choice.outcome === 'accepted') {
+          this.canInstallPwa.set(false);
+          this.showToast('Приложение установлено');
+        }
+        this.deferredPrompt = null;
+      });
+    } else {
+      this.showToast('Нажмите "Поделиться" -> "На экран «Домой»" или меню браузера');
+    }
   }
 
   @HostListener('window:keydown', ['$event'])
