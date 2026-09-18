@@ -1,4 +1,4 @@
-const CACHE_NAME = 'signal-pwa-v3';
+const CACHE_NAME = 'signal-pwa-v5';
 const OFFLINE_AUDIO_CACHE = 'signal-offline-tracks-v1';
 
 const ASSETS_TO_CACHE = [
@@ -25,7 +25,10 @@ self.addEventListener('activate', (event) => {
       Promise.all(
         keys
           .filter((key) => key !== CACHE_NAME && key !== OFFLINE_AUDIO_CACHE)
-          .map((key) => caches.delete(key))
+          .map((key) => {
+            console.log('[SW] Purging old cache:', key);
+            return caches.delete(key);
+          })
       )
     ).then(() => self.clients.claim())
   );
@@ -83,22 +86,18 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 4. For static assets (JS, CSS, Icons): Stale-while-revalidate
+  // 4. For static assets (JS, CSS, Icons): Network-First, fallback to cache
   if (url.origin === self.location.origin) {
     event.respondWith(
-      caches.match(event.request).then((cachedResponse) => {
-        const fetchPromise = fetch(event.request)
-          .then((networkResponse) => {
-            if (networkResponse && networkResponse.status === 200) {
-              const clone = networkResponse.clone();
-              caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-            }
-            return networkResponse;
-          })
-          .catch(() => cachedResponse);
-
-        return cachedResponse || fetchPromise;
-      })
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const clone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          }
+          return networkResponse;
+        })
+        .catch(() => caches.match(event.request))
     );
   }
 });

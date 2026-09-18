@@ -5,6 +5,7 @@ import {
   signal,
   computed,
   HostListener,
+  ViewEncapsulation,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -22,6 +23,7 @@ import { OfflineService } from './services/offline.service';
   imports: [CommonModule, FormsModule, HeaderComponent, SidebarComponent, PlayerBarComponent],
   templateUrl: './app.html',
   styleUrl: './app.scss',
+  encapsulation: ViewEncapsulation.None,
 })
 export class App implements OnInit {
   readonly audioService = inject(AudioService);

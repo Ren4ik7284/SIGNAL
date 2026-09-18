@@ -34,8 +34,7 @@ html, body {
   margin: 0;
   padding: 0;
   overflow: hidden;
-  position: fixed;
-  inset: 0;
+  overscroll-behavior: none;
   touch-action: manipulation;
 }
 
@@ -53,6 +52,51 @@ app-root {
   height: 100%;
   height: 100dvh;
   overflow: hidden;
+}
+
+/* Global visibility and component host sizing across entire app */
+.desktop-only {
+  display: inherit;
+}
+
+.mobile-only {
+  display: none !important;
+}
+
+app-header-bar {
+  display: block;
+  width: 100%;
+  flex-shrink: 0;
+}
+
+app-sidebar {
+  display: flex;
+  height: 100%;
+}
+
+app-player-bar {
+  display: block;
+  width: 100%;
+  flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+  .desktop-only {
+    display: none !important;
+  }
+
+  .mobile-only {
+    display: flex !important;
+  }
+
+  .mobile-mini-scrubber.mobile-only {
+    display: block !important;
+  }
+
+  app-sidebar,
+  .app-sidebar {
+    display: none !important;
+  }
 }
 
 .font-mono,

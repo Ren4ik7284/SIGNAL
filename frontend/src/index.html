@@ -19,19 +19,17 @@
   <app-root></app-root>
   <script>
     if ('serviceWorker' in navigator) {
+      var refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', function() {
+        if (!refreshing) {
+          refreshing = true;
+          window.location.reload();
+        }
+      });
+
       window.addEventListener('load', function() {
         navigator.serviceWorker.register('/sw.js').then(function(reg) {
           reg.update();
-          reg.onupdatefound = function() {
-            var installingWorker = reg.installing;
-            if (installingWorker) {
-              installingWorker.onstatechange = function() {
-                if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                  window.location.reload();
-                }
-              };
-            }
-          };
         }).catch(function() {});
       });
     }
