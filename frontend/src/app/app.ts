@@ -35,6 +35,8 @@ export class App implements OnInit {
 
   readonly isMobileDevice = signal<boolean>(false);
   readonly canInstallPwa = signal<boolean>(false);
+  readonly isPwaModalOpen = signal<boolean>(false);
+  readonly isIos = signal<boolean>(false);
   private deferredPrompt: any = null;
 
   readonly modalSearchInput = signal<string>('');
@@ -101,7 +103,10 @@ export class App implements OnInit {
     this.libraryService.checkBackendHealth();
 
     if (typeof window !== 'undefined') {
-      const isMobile = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
+      const isIosDevice = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+      this.isIos.set(isIosDevice);
+
+      const isMobile = isIosDevice || /Android|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth <= 768;
       this.isMobileDevice.set(isMobile);
 
       window.addEventListener('beforeinstallprompt', (e: Event) => {
@@ -118,7 +123,7 @@ export class App implements OnInit {
     }
   }
 
-  installPwa() {
+  openPwaInstallModal() {
     if (this.deferredPrompt) {
       this.deferredPrompt.prompt();
       this.deferredPrompt.userChoice.then((choice: any) => {
@@ -128,9 +133,13 @@ export class App implements OnInit {
         }
         this.deferredPrompt = null;
       });
-    } else {
-      this.showToast('Нажмите "Поделиться" -> "На экран «Домой»" или меню браузера');
+      return;
     }
+    this.isPwaModalOpen.set(true);
+  }
+
+  installPwa() {
+    this.openPwaInstallModal();
   }
 
   @HostListener('window:keydown', ['$event'])

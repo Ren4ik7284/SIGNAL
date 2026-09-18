@@ -42,7 +42,6 @@ export class AudioService {
 
   constructor() {
     this.audio = new Audio();
-    this.audio.crossOrigin = 'anonymous';
     this.audio.preload = 'metadata';
     this.audio.volume = this.volume();
 
@@ -85,16 +84,12 @@ export class AudioService {
 
     this.audio.addEventListener('play', () => {
       this.isPlaying.set(true);
-      if (typeof window !== 'undefined' && 'mediaSession' in navigator) {
-        navigator.mediaSession.playbackState = 'playing';
-      }
+      this.updateMediaSessionPlaybackState('playing');
     });
 
     this.audio.addEventListener('pause', () => {
       this.isPlaying.set(false);
-      if (typeof window !== 'undefined' && 'mediaSession' in navigator) {
-        navigator.mediaSession.playbackState = 'paused';
-      }
+      this.updateMediaSessionPlaybackState('paused');
     });
 
     this.audio.addEventListener('ended', () => {
@@ -136,7 +131,15 @@ export class AudioService {
       navigator.mediaSession.setActionHandler('stop', () => {
         this.audio.pause();
         this.isPlaying.set(false);
+        this.updateMediaSessionPlaybackState('none');
       });
+    } catch {}
+  }
+
+  private updateMediaSessionPlaybackState(state: 'playing' | 'paused' | 'none') {
+    if (typeof window === 'undefined' || !('mediaSession' in navigator)) return;
+    try {
+      navigator.mediaSession.playbackState = state;
     } catch {}
   }
 
@@ -144,25 +147,27 @@ export class AudioService {
     if (typeof window === 'undefined' || !('mediaSession' in navigator)) return;
 
     try {
-      const artwork = track.coverUrl
-        ? [
-            { src: track.coverUrl, sizes: '96x96', type: 'image/jpeg' },
-            { src: track.coverUrl, sizes: '128x128', type: 'image/jpeg' },
-            { src: track.coverUrl, sizes: '192x192', type: 'image/jpeg' },
-            { src: track.coverUrl, sizes: '256x256', type: 'image/jpeg' },
-            { src: track.coverUrl, sizes: '384x384', type: 'image/jpeg' },
-            { src: track.coverUrl, sizes: '512x512', type: 'image/jpeg' }
-          ]
-        : [
-            { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
-            { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' }
-          ];
+      const origin = window.location.origin;
+      const getFullUrl = (url?: string | null) => {
+        if (!url) return `${origin}/icons/icon-512.png`;
+        if (url.startsWith('http://') || url.startsWith('https://')) return url;
+        return `${origin}${url.startsWith('/') ? '' : '/'}${url}`;
+      };
+
+      const cover = getFullUrl(track.coverUrl);
 
       navigator.mediaSession.metadata = new MediaMetadata({
-        title: track.title,
+        title: track.title || 'SIGNAL Track',
         artist: track.artist || 'SIGNAL',
         album: 'SIGNAL Audio',
-        artwork: artwork
+        artwork: [
+          { src: cover, sizes: '96x96', type: 'image/png' },
+          { src: cover, sizes: '128x128', type: 'image/png' },
+          { src: cover, sizes: '192x192', type: 'image/png' },
+          { src: cover, sizes: '256x256', type: 'image/png' },
+          { src: cover, sizes: '384x384', type: 'image/png' },
+          { src: cover, sizes: '512x512', type: 'image/png' }
+        ]
       });
     } catch {}
   }
@@ -222,15 +227,13 @@ export class AudioService {
     }
 
     this.audio.src = playUrl;
-    this.audio.load();
 
     this.audio
       .play()
       .then(() => {
         this.isPlaying.set(true);
-        if (typeof window !== 'undefined' && 'mediaSession' in navigator) {
-          navigator.mediaSession.playbackState = 'playing';
-        }
+        this.updateMediaSessionPlaybackState('playing');
+        this.updateMediaSessionMetadata(track);
       })
       .catch(() => {
         this.isPlaying.set(false);
@@ -251,17 +254,13 @@ export class AudioService {
         .play()
         .then(() => {
           this.isPlaying.set(true);
-          if (typeof window !== 'undefined' && 'mediaSession' in navigator) {
-            navigator.mediaSession.playbackState = 'playing';
-          }
+          this.updateMediaSessionPlaybackState('playing');
         })
         .catch(() => {});
     } else {
       this.audio.pause();
       this.isPlaying.set(false);
-      if (typeof window !== 'undefined' && 'mediaSession' in navigator) {
-        navigator.mediaSession.playbackState = 'paused';
-      }
+      this.updateMediaSessionPlaybackState('paused');
     }
   }
 
@@ -284,10 +283,12 @@ export class AudioService {
       this.currentTime.set(clamped);
 
       this.audio.src = newUrl;
-      this.audio.load();
       this.audio
         .play()
-        .then(() => this.isPlaying.set(true))
+        .then(() => {
+          this.isPlaying.set(true);
+          this.updateMediaSessionPlaybackState('playing');
+        })
         .catch(() => {});
     } else {
       try {

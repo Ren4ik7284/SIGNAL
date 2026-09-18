@@ -2318,6 +2318,62 @@
       .view-title { font-size: 17px; }
       .view-subtitle { font-size: 11px; }
 
+      .playlist-header-details {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        flex-wrap: nowrap;
+
+        .playlist-badge-avatar {
+          width: 44px;
+          height: 44px;
+          min-width: 44px;
+          font-size: 16px;
+          flex-shrink: 0;
+        }
+
+        .playlist-header-meta {
+          flex: 1;
+          min-width: 0;
+          overflow: hidden;
+
+          .playlist-label {
+            font-size: 9px;
+            color: var(--text-muted);
+          }
+
+          .view-title {
+            font-size: 16px;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin: 0;
+          }
+
+          .view-subtitle {
+            font-size: 11px;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-top: 1px;
+          }
+        }
+
+        .playlist-header-actions {
+          margin-left: 0;
+          flex-shrink: 0;
+
+          .btn-delete-pl {
+            padding: 6px 10px;
+            font-size: 11px;
+            span { display: none; }
+          }
+        }
+      }
+
       .genre-filter-row {
         overflow-x: auto;
         flex-wrap: nowrap;
@@ -2916,6 +2972,71 @@
       align-items: center;
     }
 
+    .modal-body {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 12px 14px;
+      max-height: 52dvh;
+      overflow-y: auto;
+    }
+
+    .playlist-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      cursor: pointer;
+      width: 100%;
+
+      &:active {
+        background: var(--bg-elevated);
+      }
+
+      .pl-avatar {
+        width: 36px;
+        height: 36px;
+        min-width: 36px;
+        border-radius: 6px;
+        background: var(--bg-panel);
+        border: 1px solid var(--border-subtle);
+        font-size: 13px;
+        font-weight: 700;
+        font-family: var(--font-mono);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-primary);
+        flex-shrink: 0;
+      }
+
+      .pl-meta {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        min-width: 0;
+        flex: 1;
+
+        .pl-name {
+          font-size: 14px;
+          font-weight: 600;
+          color: var(--text-primary);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .pl-count {
+          font-size: 11px;
+          color: var(--text-muted);
+          margin-top: 2px;
+        }
+      }
+    }
+
     .mobile-backup-row {
       display: flex;
       flex-direction: column;
@@ -3002,6 +3123,51 @@
       border-left: none;
       height: 100dvh;
       padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+    }
+  }
+
+  .pwa-install-dialog {
+    max-width: 440px !important;
+
+    .pwa-instructions-body {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 14px 16px;
+
+      .pwa-step-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 10px 12px;
+        background: var(--bg-card);
+        border: 1px solid var(--border-subtle);
+        border-radius: 8px;
+
+        .pwa-step-num {
+          width: 22px;
+          height: 22px;
+          min-width: 22px;
+          border-radius: 50%;
+          background: var(--accent-white);
+          color: #000;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-weight: 700;
+          font-size: 11px;
+        }
+
+        .pwa-step-text {
+          font-size: 12px;
+          line-height: 1.45;
+          color: var(--text-secondary);
+
+          strong {
+            color: var(--text-primary);
+          }
+        }
+      }
     }
   }
 

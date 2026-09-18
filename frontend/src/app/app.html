@@ -49,14 +49,14 @@
     </div>
 
     <div class="header-actions">
-      @if (isMobileDevice() && canInstallPwa()) {
-        <button class="btn-pwa-install font-mono" (click)="installPwa()" title="Установить на телефон">
+      @if (isMobileDevice()) {
+        <button class="btn-pwa-install font-mono" (click)="openPwaInstallModal()" title="Установить на телефон">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
             <polyline points="7 10 12 15 17 10"/>
             <line x1="12" y1="15" x2="12" y2="3"/>
           </svg>
-          <span>PWA</span>
+          <span>Скачать</span>
         </button>
       }
 
@@ -1539,6 +1539,70 @@
   }
 
   
+  @if (isPwaModalOpen()) {
+    <div class="modal-backdrop" (click)="isPwaModalOpen.set(false)">
+      <div class="modal-dialog pwa-install-dialog" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <div>
+            <h3 class="modal-title">Установка SIGNAL</h3>
+            <p class="modal-subtitle">Приложение без рамок браузера на вашем телефоне</p>
+          </div>
+          <button class="btn-close-sm" (click)="isPwaModalOpen.set(false)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body pwa-instructions-body">
+          @if (isIos()) {
+            <div class="pwa-step-item">
+              <div class="pwa-step-num font-mono">1</div>
+              <div class="pwa-step-text">
+                В нижней панели Safari нажмите кнопку <strong>«Поделиться»</strong> (квадрат со стрелкой ⬆).
+              </div>
+            </div>
+            <div class="pwa-step-item">
+              <div class="pwa-step-num font-mono">2</div>
+              <div class="pwa-step-text">
+                Пролистайте список действий вниз и выберите <strong>«На экран "Домой"»</strong>.
+              </div>
+            </div>
+            <div class="pwa-step-item">
+              <div class="pwa-step-num font-mono">3</div>
+              <div class="pwa-step-text">
+                Нажмите <strong>«Добавить»</strong> в правом верхнем углу экрана.
+              </div>
+            </div>
+          } @else {
+            <div class="pwa-step-item">
+              <div class="pwa-step-num font-mono">1</div>
+              <div class="pwa-step-text">
+                В правом верхнем углу браузера нажмите меню <strong>(три точки ⋮)</strong>.
+              </div>
+            </div>
+            <div class="pwa-step-item">
+              <div class="pwa-step-num font-mono">2</div>
+              <div class="pwa-step-text">
+                Выберите пункт <strong>«Установить приложение»</strong> или <strong>«Добавить на главный экран»</strong>.
+              </div>
+            </div>
+            <div class="pwa-step-item">
+              <div class="pwa-step-num font-mono">3</div>
+              <div class="pwa-step-text">
+                Подтвердите установку. Иконка плеера появится на рабочем столе.
+              </div>
+            </div>
+          }
+        </div>
+        <div class="modal-footer">
+          <button class="btn-confirm-action" style="width: 100%; text-align: center;" (click)="isPwaModalOpen.set(false)">
+            Понятно
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
   @if (toastMessage()) {
     <div class="system-toast font-mono">
       <span class="toast-dot"></span>
