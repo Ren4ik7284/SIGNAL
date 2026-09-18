@@ -401,7 +401,7 @@
                     class="track-row" 
                     [class.playing]="audioService.currentTrack()?.id === track.id"
                     [class.has-dropdown]="activePlaylistPickerTrackId() === track.id"
-                    (dblclick)="playTrack(track)"
+                    (click)="playTrack(track)"
                   >
                     <td class="cell-index">
                       @if (audioService.currentTrack()?.id === track.id && audioService.isPlaying()) {

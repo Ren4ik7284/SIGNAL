@@ -13,6 +13,84 @@ export class LibraryService {
   private readonly STORAGE_KEY_STATIONS = 'signal_music_radio_stations';
   private readonly STORAGE_KEY_UPDATED_AT = 'signal_music_updated_at';
 
+  readonly defaultTracks: Track[] = [
+    {
+      id: 'default-track-1',
+      title: 'red weather',
+      artist: 'ONDA ANDAR',
+      album: 'Online Music',
+      duration: 104,
+      audioUrl: 'https://signal-audio-backend-production.up.railway.app/api/stream?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3DSUCefsDmjk0',
+      coverUrl: 'https://signal-audio-backend-production.up.railway.app/api/cover?url=https%3A%2F%2Fi.ytimg.com%2Fvi%2FSUCefsDmjk0%2Fhq720.jpg',
+      genre: 'Electronic',
+      format: 'mp3',
+      bitrate: '192 kbps',
+      plays: 0,
+      isFavorite: false,
+      addedAt: '2026-09-11',
+    },
+    {
+      id: 'default-track-2',
+      title: 'Недоволен',
+      artist: 'Scally Milano',
+      album: 'Online Music',
+      duration: 121,
+      audioUrl: 'https://signal-audio-backend-production.up.railway.app/api/stream?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3DHVXlDpNainw',
+      coverUrl: 'https://signal-audio-backend-production.up.railway.app/api/cover?url=https%3A%2F%2Fi.ytimg.com%2Fvi%2FHVXlDpNainw%2Fhq720.jpg',
+      genre: 'Hip-Hop',
+      format: 'mp3',
+      bitrate: '192 kbps',
+      plays: 0,
+      isFavorite: false,
+      addedAt: '2026-09-11',
+    },
+    {
+      id: 'default-track-3',
+      title: 'ДИНАСТИЯ',
+      artist: 'wo',
+      album: 'SoundCloud',
+      duration: 150,
+      audioUrl: 'https://signal-audio-backend-production.up.railway.app/api/stream?url=https%3A%2F%2Fsoundcloud.com%2Fwwoowwoo%2Fvillian-madk1d-dinastiia',
+      coverUrl: 'https://i1.sndcdn.com/artworks-Z9NZvqkNSb4Z1xrV-E5zm9w-t500x500.jpg',
+      genre: 'Electronic',
+      format: 'mp3',
+      bitrate: '192 kbps',
+      plays: 0,
+      isFavorite: true,
+      addedAt: '2026-09-11',
+    },
+    {
+      id: 'default-track-4',
+      title: 'Mania (Fl Studio Session)',
+      artist: 'SchuberTEKK',
+      album: 'SoundCloud',
+      duration: 252,
+      audioUrl: 'https://signal-audio-backend-production.up.railway.app/api/stream?url=https%3A%2F%2Fsoundcloud.com%2Forlando-267593096%2Fmania',
+      coverUrl: 'https://i1.sndcdn.com/artworks-VxzuqknJ4ffnSJfg-aAYIYw-t500x500.jpg',
+      genre: 'Techno',
+      format: 'mp3',
+      bitrate: '192 kbps',
+      plays: 0,
+      isFavorite: false,
+      addedAt: '2026-09-11',
+    },
+    {
+      id: 'default-track-5',
+      title: 'Drone Zone 24/7',
+      artist: 'SomaFM Stream',
+      album: 'Live Radio Stations',
+      duration: 0,
+      audioUrl: 'https://ice2.somafm.com/dronezone-128-mp3',
+      genre: 'Ambient',
+      format: 'stream',
+      bitrate: '128k Live',
+      plays: 0,
+      isFavorite: false,
+      addedAt: '2026-09-11',
+      isLiveStream: true,
+    },
+  ];
+
   readonly defaultRadioStations: RadioStation[] = [
     {
       id: 'default-1',
@@ -25,10 +103,10 @@ export class LibraryService {
     {
       id: 'default-2',
       name: 'Europa Plus',
-      streamUrl: 'https://ep128.hostingradio.ru:8030/ep128.mp3',
+      streamUrl: 'https://ep256.hostingradio.ru:8052/europaplus256.mp3',
       genre: 'Pop / Top 40',
       country: 'RU',
-      bitrate: '128k MP3',
+      bitrate: '256k MP3',
     },
     {
       id: 'default-3',
@@ -56,41 +134,41 @@ export class LibraryService {
     },
     {
       id: 'default-6',
-      name: 'Nightwave Plaza',
-      streamUrl: 'https://plaza.one/mp3',
-      genre: 'Vaporwave / Synth',
-      country: 'Global',
-      bitrate: '128k MP3',
-    },
-    {
-      id: 'default-7',
-      name: 'Jazz24',
-      streamUrl: 'https://live.wostreaming.net/manifest/kplufm-jazz24aac-ibc1',
-      genre: 'Classic Jazz',
-      country: 'US',
-      bitrate: '128k AAC',
-    },
-    {
-      id: 'default-8',
-      name: 'Rock Antenne',
-      streamUrl: 'https://stream.rockantenne.de/rockantenne/stream/mp3',
-      genre: 'Rock / Classic Rock',
-      country: 'DE',
-      bitrate: '192k MP3',
-    },
-    {
-      id: 'default-9',
-      name: 'Lofi 24/7 Stream',
-      streamUrl: 'https://stream.zeno.fm/f3wvbbqmdg8uv',
-      genre: 'Lo-Fi / Beats',
-      country: 'Global',
-      bitrate: '128k MP3',
-    },
-    {
-      id: 'default-10',
       name: 'Record Deep',
       streamUrl: 'https://radiorecord.hostingradio.ru/deep96.aacp',
       genre: 'Deep House',
+      country: 'RU',
+      bitrate: '96k AAC',
+    },
+    {
+      id: 'default-7',
+      name: 'Record Synthwave',
+      streamUrl: 'https://radiorecord.hostingradio.ru/synth96.aacp',
+      genre: 'Synthwave / Retro',
+      country: 'RU',
+      bitrate: '96k AAC',
+    },
+    {
+      id: 'default-8',
+      name: 'Record Lo-Fi',
+      streamUrl: 'https://radiorecord.hostingradio.ru/lofi96.aacp',
+      genre: 'Lo-Fi / Beats',
+      country: 'RU',
+      bitrate: '96k AAC',
+    },
+    {
+      id: 'default-9',
+      name: 'SomaFM: Secret Agent',
+      streamUrl: 'https://ice1.somafm.com/secretagent-128-mp3',
+      genre: 'Spy / Lounge',
+      country: 'US',
+      bitrate: '128k Live',
+    },
+    {
+      id: 'default-10',
+      name: 'Record Russian Hits',
+      streamUrl: 'https://radiorecord.hostingradio.ru/rus96.aacp',
+      genre: 'Pop / Russian',
       country: 'RU',
       bitrate: '96k AAC',
     },
@@ -194,7 +272,17 @@ export class LibraryService {
       savedStations = [];
     }
 
-    if (!savedStations || savedStations.length === 0) {
+    if (!savedTracks || savedTracks.length === 0) {
+      savedTracks = [...this.defaultTracks];
+      try {
+        localStorage.setItem(this.STORAGE_KEY_TRACKS, JSON.stringify(savedTracks));
+      } catch {}
+    }
+
+    const hasBrokenStations = savedStations.some(
+      (s) => s.streamUrl.includes(':8030') || s.streamUrl.includes('wostreaming.net') || s.streamUrl.includes('stream.zeno.fm')
+    );
+    if (!savedStations || savedStations.length === 0 || hasBrokenStations) {
       savedStations = [...this.defaultRadioStations];
       try {
         localStorage.setItem(this.STORAGE_KEY_STATIONS, JSON.stringify(savedStations));
