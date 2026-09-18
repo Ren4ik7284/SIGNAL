@@ -32,7 +32,7 @@ export class App implements OnInit {
   readonly addModalTab = signal<'youtube' | 'search' | 'radio' | 'url' | 'file'>('youtube');
   readonly isPlaylistModalOpen = signal<boolean>(false);
   readonly isQueueDrawerOpen = signal<boolean>(false);
-  readonly activeTab = signal<'all' | 'favorites' | 'uploads' | 'streams' | 'playlist'>('all');
+  readonly activeTab = signal<'all' | 'favorites' | 'uploads' | 'streams' | 'playlist' | 'offline'>('all');
   readonly toastMessage = signal<string | null>(null);
 
   readonly isMobilePlayerExpanded = signal<boolean>(false);
@@ -194,7 +194,7 @@ export class App implements OnInit {
     }, 3000);
   }
 
-  setView(view: 'all' | 'favorites' | 'uploads' | 'streams' | 'playlist', playlistId?: string) {
+  setView(view: 'all' | 'favorites' | 'uploads' | 'streams' | 'playlist' | 'offline', playlistId?: string) {
     this.activeTab.set(view);
     this.libraryService.selectedView.set(view);
     if (playlistId) {

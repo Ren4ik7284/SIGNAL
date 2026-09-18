@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Output, inject, signal } from '@angular/core';
+import { Component, EventEmitter, Output, inject, signal, ViewEncapsulation } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AudioService } from '../../services/audio.service';
@@ -12,6 +12,7 @@ import { Track } from '../../models/track.model';
   imports: [CommonModule, FormsModule],
   templateUrl: './player-bar.component.html',
   styleUrl: './player-bar.component.scss',
+  encapsulation: ViewEncapsulation.None,
 })
 export class PlayerBarComponent {
   readonly audioService = inject(AudioService);
@@ -19,6 +20,13 @@ export class PlayerBarComponent {
   readonly offlineService = inject(OfflineService);
 
   @Output() toggleQueueDrawer = new EventEmitter<void>();
+  @Output() expandMobilePlayer = new EventEmitter<void>();
+
+  onLeftClick() {
+    if (typeof window !== 'undefined' && window.innerWidth <= 768) {
+      this.expandMobilePlayer.emit();
+    }
+  }
 
   async toggleOfflineTrack(track: Track) {
     if (this.offlineService.isTrackOffline(track.id)) {

@@ -262,3 +262,119 @@
     }
   }
 }
+
+:host {
+  display: block;
+  width: 100%;
+}
+
+@media (max-width: 768px) {
+  .app-player-bar {
+    position: relative;
+    bottom: auto;
+    left: auto;
+    right: auto;
+    height: 58px;
+    min-height: 58px;
+    max-height: 58px;
+    flex-shrink: 0;
+    background: rgba(18, 18, 22, 0.98);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-top: 1px solid var(--border-subtle);
+    padding: 0 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    z-index: 30;
+    gap: 8px;
+
+    .mobile-mini-scrubber {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 2px;
+      background: var(--accent-white);
+      transition: width 0.2s linear;
+      z-index: 45;
+      pointer-events: none;
+    }
+
+    .player-left {
+      flex: 1;
+      min-width: 0;
+      max-width: calc(100% - 95px);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+
+      .now-playing-cover {
+        width: 38px;
+        height: 38px;
+        min-width: 38px;
+        min-height: 38px;
+        border-radius: 6px;
+      }
+
+      .now-playing-meta {
+        flex: 1;
+        min-width: 0;
+
+        .meta-title-line .player-track-title {
+          font-size: 12px;
+          font-weight: 600;
+          color: var(--text-primary);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .player-track-artist {
+          font-size: 11px;
+          color: var(--text-muted);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+      }
+
+      .player-fav-btn {
+        display: none !important;
+      }
+    }
+
+    .player-center {
+      width: auto;
+      max-width: none;
+      flex: 0 0 auto;
+
+      .player-buttons {
+        gap: 6px;
+
+        .ctrl-btn:not(.btn-mobile-visible) {
+          display: none !important;
+        }
+
+        .btn-mobile-visible {
+          width: 32px;
+          height: 32px;
+          display: flex !important;
+        }
+
+        .play-main-btn {
+          width: 36px;
+          height: 36px;
+        }
+      }
+
+      .player-scrubber-row {
+        display: none !important;
+      }
+    }
+
+    .player-right {
+      display: none !important;
+    }
+  }
+}

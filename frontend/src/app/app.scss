@@ -2294,6 +2294,7 @@
     position: relative;
   }
 
+  app-sidebar,
   .app-sidebar {
     display: none !important;
   }
@@ -2668,13 +2669,19 @@
     .player-center {
       width: auto;
       max-width: none;
+      flex: 0 0 auto;
 
       .player-buttons {
         gap: 6px;
 
-        .ctrl-btn {
+        .ctrl-btn:not(.btn-mobile-visible) {
+          display: none !important;
+        }
+
+        .btn-mobile-visible {
           width: 32px;
           height: 32px;
+          display: flex !important;
         }
 
         .play-main-btn {
@@ -2682,6 +2689,14 @@
           height: 36px;
         }
       }
+
+      .player-scrubber-row {
+        display: none !important;
+      }
+    }
+
+    .player-right {
+      display: none !important;
     }
   }
 

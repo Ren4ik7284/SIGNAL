@@ -182,3 +182,50 @@
     }
   }
 }
+
+:host {
+  display: block;
+  width: 100%;
+}
+
+@media (max-width: 768px) {
+  .app-header {
+    height: 52px;
+    min-height: 52px;
+    max-height: 52px;
+    padding: 0 12px;
+    gap: 8px;
+
+    .header-left {
+      min-width: auto;
+      .brand-badge {
+        gap: 6px;
+        .brand-title { font-size: 14px; }
+        .brand-tag { display: none; }
+      }
+    }
+
+    .header-search {
+      flex: 1;
+      .search-box {
+        .search-icon { left: 10px; width: 14px; height: 14px; }
+        .search-input {
+          height: 34px;
+          font-size: 13px;
+          padding: 0 28px 0 30px;
+          &::placeholder { font-size: 12px; }
+        }
+        .search-actions-group .btn-search-online-hint { display: none; }
+      }
+    }
+
+    .header-actions {
+      .backend-status-pill { display: none; }
+      .btn-add-track {
+        padding: 6px 10px;
+        font-size: 12px;
+        span { display: none; }
+      }
+    }
+  }
+}

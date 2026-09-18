@@ -1,5 +1,6 @@
-import { Injectable, signal, computed } from '@angular/core';
+import { Injectable, signal, computed, inject } from '@angular/core';
 import { Track, Playlist, RadioStation } from '../models/track.model';
+import { OfflineService } from './offline.service';
 
 @Injectable({
   providedIn: 'root',
@@ -177,9 +178,10 @@ export class LibraryService {
   readonly tracks = signal<Track[]>([]);
   readonly playlists = signal<Playlist[]>([]);
   readonly radioStations = signal<RadioStation[]>([]);
+  readonly offlineService = inject(OfflineService);
   readonly searchQuery = signal<string>('');
   readonly selectedGenre = signal<string>('all');
-  readonly selectedView = signal<'all' | 'favorites' | 'uploads' | 'streams' | 'playlist'>('all');
+  readonly selectedView = signal<'all' | 'favorites' | 'uploads' | 'streams' | 'playlist' | 'offline'>('all');
   readonly activePlaylistId = signal<string | null>(null);
 
   readonly onlineSearchResults = signal<Track[]>([]);
@@ -189,6 +191,10 @@ export class LibraryService {
   readonly availableGenres = computed(() => {
     const all = this.tracks().map((t) => t.genre).filter(Boolean);
     return ['all', ...Array.from(new Set(all))];
+  });
+
+  readonly offlineTracksCount = computed(() => {
+    return this.tracks().filter((t) => this.offlineService.isTrackOffline(t.id)).length;
   });
 
   readonly filteredTracks = computed(() => {
@@ -201,6 +207,7 @@ export class LibraryService {
       if (view === 'favorites' && !track.isFavorite) return false;
       if (view === 'uploads' && !track.isLocalUpload) return false;
       if (view === 'streams' && !track.isLiveStream && track.format !== 'stream') return false;
+      if (view === 'offline' && !this.offlineService.isTrackOffline(track.id)) return false;
       if (view === 'playlist' && playlistId) {
         const pl = this.playlists().find((p) => p.id === playlistId);
         if (!pl || !pl.trackIds.includes(track.id)) return false;

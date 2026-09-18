@@ -1,6 +1,9 @@
 <footer class="app-player-bar">
-  <!-- Left Column: Current Track Info -->
-  <div class="player-left">
+  <!-- Mobile Mini Scrubber Bar along top edge -->
+  <div class="mobile-mini-scrubber mobile-only" [style.width.%]="audioService.progressPercent()"></div>
+
+  <!-- Left Column: Current Track Info (tapping opens mobile full player) -->
+  <div class="player-left" (click)="onLeftClick()">
     <div class="now-playing-cover">
       @if (audioService.currentTrack()?.coverUrl) {
         <img [src]="audioService.currentTrack()!.coverUrl" alt="cover" class="cover-img-thumbnail" />
@@ -15,16 +18,16 @@
       <div class="meta-title-line">
         <span class="player-track-title">{{ audioService.currentTrack()?.title || 'Нет активного трека' }}</span>
         @if (audioService.currentTrack()?.format) {
-          <span class="player-badge-format font-mono">{{ audioService.currentTrack()?.format | uppercase }}</span>
+          <span class="player-badge-format font-mono desktop-only">{{ audioService.currentTrack()?.format | uppercase }}</span>
         }
       </div>
       <span class="player-track-artist">{{ audioService.currentTrack()?.artist || 'Выберите трек для воспроизведения' }}</span>
     </div>
     @if (audioService.currentTrack(); as cur) {
       <button 
-        class="player-fav-btn" 
+        class="player-fav-btn desktop-only" 
         [class.favorited]="cur.isFavorite"
-        (click)="libraryService.toggleFavorite(cur.id)"
+        (click)="libraryService.toggleFavorite(cur.id); $event.stopPropagation()"
         title="В избранное (L)"
       >
         <svg width="16" height="16" viewBox="0 0 24 24" [attr.fill]="cur.isFavorite ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
@@ -34,9 +37,9 @@
 
       @if (!cur.isLiveStream) {
         <button 
-          class="player-fav-btn" 
+          class="player-fav-btn desktop-only" 
           [class.favorited]="offlineService.isTrackOffline(cur.id)"
-          (click)="toggleOfflineTrack(cur)"
+          (click)="toggleOfflineTrack(cur); $event.stopPropagation()"
           [title]="offlineService.isTrackOffline(cur.id) ? 'Сохранено оффлайн (нажмите для удаления)' : 'Скачать для оффлайн-прослушивания'"
         >
           @if (offlineService.isDownloading(cur.id)) {
@@ -65,9 +68,9 @@
     <div class="player-buttons">
       <!-- Shuffle -->
       <button 
-        class="ctrl-btn" 
+        class="ctrl-btn desktop-only" 
         [class.active]="audioService.isShuffle()"
-        (click)="audioService.toggleShuffle()"
+        (click)="audioService.toggleShuffle(); $event.stopPropagation()"
         title="Случайный порядок"
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -80,7 +83,7 @@
       </button>
 
       <!-- Prev -->
-      <button class="ctrl-btn" (click)="audioService.prev()" title="Предыдущий трек">
+      <button class="ctrl-btn desktop-only" (click)="audioService.prev(); $event.stopPropagation()" title="Предыдущий трек">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polygon points="19 20 9 12 19 4 19 20"/>
           <line x1="5" y1="19" x2="5" y2="5"/>
@@ -90,7 +93,7 @@
       <!-- Main Play/Pause Button -->
       <button 
         class="play-main-btn" 
-        (click)="audioService.togglePlay()"
+        (click)="audioService.togglePlay(); $event.stopPropagation()"
         title="Пуск / Пауза (Пробел)"
       >
         @if (audioService.isPlaying()) {
@@ -106,7 +109,7 @@
       </button>
 
       <!-- Next -->
-      <button class="ctrl-btn" (click)="audioService.next()" title="Следующий трек">
+      <button class="ctrl-btn btn-mobile-visible" (click)="audioService.next(); $event.stopPropagation()" title="Следующий трек">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polygon points="5 4 15 12 5 20 5 4"/>
           <line x1="19" y1="5" x2="19" y2="19"/>
@@ -115,9 +118,9 @@
 
       <!-- Repeat -->
       <button 
-        class="ctrl-btn" 
+        class="ctrl-btn desktop-only" 
         [class.active]="audioService.repeatMode() !== 'off'"
-        (click)="audioService.cycleRepeat()"
+        (click)="audioService.cycleRepeat(); $event.stopPropagation()"
         [title]="'Повтор: ' + audioService.repeatMode()"
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -133,7 +136,7 @@
     </div>
 
     <!-- Scrubber Row -->
-    <div class="player-scrubber-row">
+    <div class="player-scrubber-row desktop-only">
       <span class="time-stamp font-mono">
         @if (audioService.isLiveStream()) {
           LIVE
@@ -170,8 +173,8 @@
     </div>
   </div>
 
-  <!-- Right Column: Volume and Queue -->
-  <div class="player-right">
+  <!-- Right Column: Volume and Queue (desktop only) -->
+  <div class="player-right desktop-only">
     <!-- Volume Group -->
     <div class="volume-group">
       <button class="utility-btn" (click)="audioService.toggleMute()" title="Без звука (M)">

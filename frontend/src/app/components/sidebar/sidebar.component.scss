@@ -1,3 +1,15 @@
+:host {
+  display: flex;
+  height: 100%;
+}
+
+@media (max-width: 768px) {
+  :host,
+  .app-sidebar {
+    display: none !important;
+  }
+}
+
 .app-sidebar {
   width: 230px;
   min-width: 230px;

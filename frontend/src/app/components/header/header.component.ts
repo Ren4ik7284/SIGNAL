@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Output, inject } from '@angular/core';
+import { Component, EventEmitter, Output, inject, ViewEncapsulation } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { LibraryService } from '../../services/library.service';
@@ -9,6 +9,7 @@ import { LibraryService } from '../../services/library.service';
   imports: [CommonModule, FormsModule],
   templateUrl: './header.component.html',
   styleUrl: './header.component.scss',
+  encapsulation: ViewEncapsulation.None,
 })
 export class HeaderComponent {
   readonly libraryService = inject(LibraryService);

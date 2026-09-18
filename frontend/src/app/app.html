@@ -42,6 +42,7 @@
             } @else {
               <h1 class="view-title">
                 @if (activeTab() === 'all') { Каталог музыки }
+                @else if (activeTab() === 'offline') { Оффлайн музыка }
                 @else if (activeTab() === 'streams') { Онлайн-радио }
                 @else if (activeTab() === 'favorites') { Избранная музыка }
                 @else if (activeTab() === 'uploads') { Локальные файлы }
@@ -50,6 +51,8 @@
               <p class="view-subtitle">
                 @if (activeTab() === 'streams') {
                   {{ libraryService.radioStations().length }} станций доступно для онлайн-вещания
+                } @else if (activeTab() === 'offline') {
+                  {{ libraryService.filteredTracks().length }} треков сохранено на устройстве (доступно без интернета)
                 } @else if (libraryService.filteredTracks().length > 0) {
                   {{ libraryService.filteredTracks().length }} треков доступно для воспроизведения
                 } @else {
@@ -377,10 +380,39 @@
                     <span class="card-artist">{{ track.artist }}</span>
                     <span class="dot-sep">•</span>
                     <span class="font-mono">{{ track.isLiveStream ? 'LIVE' : formatTime(track.duration) }}</span>
+                    @if (offlineService.isTrackOffline(track.id)) {
+                      <span class="dot-sep">•</span>
+                      <span class="offline-badge-tag font-mono" style="color: #22c55e; font-weight: 700; font-size: 10px;">ОФФЛАЙН</span>
+                    }
                   </div>
                 </div>
 
                 <div class="card-actions" (click)="$event.stopPropagation()">
+                  @if (!track.isLiveStream) {
+                    <button 
+                      class="m-action-btn"
+                      [class.favorited]="offlineService.isTrackOffline(track.id)"
+                      (click)="toggleOfflineTrack(track, $event)"
+                      [title]="offlineService.isTrackOffline(track.id) ? 'Удалить из памяти' : 'Скачать для оффлайн'"
+                    >
+                      @if (offlineService.isDownloading(track.id)) {
+                        <svg class="spin-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+                        </svg>
+                      } @else if (offlineService.isTrackOffline(track.id)) {
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5">
+                          <path d="M20 6 9 17l-5-5"/>
+                        </svg>
+                      } @else {
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                          <polyline points="7 10 12 15 17 10"/>
+                          <line x1="12" y1="15" x2="12" y2="3"/>
+                        </svg>
+                      }
+                    </button>
+                  }
+
                   <button 
                     class="m-action-btn" 
                     [class.favorited]="track.isFavorite"
@@ -463,6 +495,7 @@
   
   <app-player-bar
     (toggleQueueDrawer)="isQueueDrawerOpen.update(v => !v)"
+    (expandMobilePlayer)="isMobilePlayerExpanded.set(true)"
   ></app-player-bar>
 
   
@@ -475,11 +508,13 @@
       <span>Треки</span>
     </button>
 
-    <button class="m-nav-item" [class.active]="activeTab() === 'streams'" (click)="setView('streams')">
+    <button class="m-nav-item" [class.active]="activeTab() === 'offline'" (click)="setView('offline')">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="7 10 12 15 17 10"/>
+        <line x1="12" y1="15" x2="12" y2="3"/>
       </svg>
-      <span>Радио</span>
+      <span>Оффлайн</span>
     </button>
 
     <button class="m-nav-item" [class.active]="activeTab() === 'favorites'" (click)="setView('favorites')">
@@ -489,18 +524,18 @@
       <span>Любимое</span>
     </button>
 
+    <button class="m-nav-item" [class.active]="activeTab() === 'streams'" (click)="setView('streams')">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>
+      </svg>
+      <span>Радио</span>
+    </button>
+
     <button class="m-nav-item" [class.active]="activeTab() === 'playlist'" (click)="isMobilePlaylistsOpen.set(true)">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M4 6h16M4 12h16M4 18h7"/>
       </svg>
       <span>Плейлисты</span>
-    </button>
-
-    <button class="m-nav-item add-btn-highlight" (click)="isAddModalOpen.set(true)">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-      </svg>
-      <span>Добавить</span>
     </button>
   </nav>
 
