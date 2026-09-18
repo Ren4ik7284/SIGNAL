@@ -570,11 +570,18 @@
           </svg>
         </button>
         <span class="sheet-title-center font-mono">СЕЙЧАС ИГРАЕТ</span>
-        <button class="btn-sheet-close" (click)="isQueueDrawerOpen.set(true)">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
-          </svg>
-        </button>
+        <div style="display: flex; align-items: center; gap: 4px;">
+          <button class="btn-sheet-close" (click)="audioService.toggleVisualizer()" title="Визуализатор (V)">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 20V10M18 20V4M6 20v-4"/>
+            </svg>
+          </button>
+          <button class="btn-sheet-close" (click)="isQueueDrawerOpen.set(true)">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+            </svg>
+          </button>
+        </div>
       </div>
 
       <div class="sheet-art-wrap">
@@ -1513,6 +1520,10 @@
         </div>
       </div>
     </div>
+  }
+
+  @if (audioService.isVisualizerOpen()) {
+    <app-visualizer [mode]="'full'"></app-visualizer>
   }
 
   @if (toastMessage()) {

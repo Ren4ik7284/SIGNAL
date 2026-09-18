@@ -4,12 +4,13 @@ import { FormsModule } from '@angular/forms';
 import { AudioService } from '../../services/audio.service';
 import { LibraryService } from '../../services/library.service';
 import { OfflineService } from '../../services/offline.service';
+import { VisualizerComponent } from '../visualizer/visualizer.component';
 import { Track } from '../../models/track.model';
 
 @Component({
   selector: 'app-player-bar',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, VisualizerComponent],
   templateUrl: './player-bar.component.html',
   styleUrl: './player-bar.component.scss',
   encapsulation: ViewEncapsulation.None,

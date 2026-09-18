@@ -11,15 +11,17 @@ export class AudioService {
   private offlineService = inject(OfflineService);
   private audio: HTMLAudioElement;
 
-  // Web Audio API Nodes for Normalization & Crossfade
+  // Web Audio API Nodes for Normalization & Crossfade & Visualizer
   private audioCtx: AudioContext | null = null;
   private sourceNode: MediaElementAudioSourceNode | null = null;
   private compressorNode: DynamicsCompressorNode | null = null;
   private gainNode: GainNode | null = null;
+  private analyserNode: AnalyserNode | null = null;
   private isAudioGraphReady = false;
 
   readonly isNormalizationEnabled = signal<boolean>(true);
   readonly isCrossfadeEnabled = signal<boolean>(true);
+  readonly isVisualizerOpen = signal<boolean>(false);
 
   readonly currentTrack = signal<Track | null>(null);
   readonly isPlaying = signal<boolean>(false);
@@ -119,14 +121,61 @@ export class AudioService {
       this.gainNode = this.audioCtx.createGain();
       this.gainNode.gain.setValueAtTime(1.0, this.audioCtx.currentTime);
 
-      // Connect graph
+      // 3. AnalyserNode for real-time audio visualization
+      this.analyserNode = this.audioCtx.createAnalyser();
+      this.analyserNode.fftSize = 256;
+      this.analyserNode.smoothingTimeConstant = 0.82;
+
+      // Connect graph: Source -> Compressor -> Gain -> Analyser -> Destination
       this.sourceNode.connect(this.compressorNode);
       this.compressorNode.connect(this.gainNode);
-      this.gainNode.connect(this.audioCtx.destination);
+      this.gainNode.connect(this.analyserNode);
+      this.analyserNode.connect(this.audioCtx.destination);
 
       this.isAudioGraphReady = true;
     } catch (err) {
       console.warn('[AudioService] Web Audio API graph not available, using standard HTML5 Audio:', err);
+    }
+  }
+
+  ensureAudioContext() {
+    this.initAudioContext();
+    if (this.audioCtx && this.audioCtx.state === 'suspended') {
+      this.audioCtx.resume().catch(() => {});
+    }
+  }
+
+  toggleVisualizer() {
+    this.ensureAudioContext();
+    this.isVisualizerOpen.update((v) => !v);
+  }
+
+  openVisualizer() {
+    this.ensureAudioContext();
+    this.isVisualizerOpen.set(true);
+  }
+
+  closeVisualizer() {
+    this.isVisualizerOpen.set(false);
+  }
+
+  getAudioFrequencyData(array: Uint8Array): boolean {
+    if (!this.analyserNode) return false;
+    try {
+      this.analyserNode.getByteFrequencyData(array as any);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  getAudioTimeDomainData(array: Uint8Array): boolean {
+    if (!this.analyserNode) return false;
+    try {
+      this.analyserNode.getByteTimeDomainData(array as any);
+      return true;
+    } catch {
+      return false;
     }
   }
 
@@ -451,9 +500,7 @@ export class AudioService {
       return;
     }
 
-    if (this.audioCtx && this.audioCtx.state === 'suspended') {
-      this.audioCtx.resume().catch(() => {});
-    }
+    this.ensureAudioContext();
 
     const cur = this.currentTrack();
     if (this.audio.paused) {

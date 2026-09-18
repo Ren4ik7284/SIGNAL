@@ -1,0 +1,225 @@
+@if (mode() === 'mini') {
+  <div 
+    class="vis-mini-container" 
+    (click)="audioService.openVisualizer(); $event.stopPropagation()"
+    title="Открыть аудио-визуализатор (V)"
+  >
+    <canvas #visCanvas class="vis-mini-canvas"></canvas>
+  </div>
+} @else {
+  <div #visualizerContainer class="vis-fullscreen-overlay" [class.is-native-fullscreen]="isFullscreen()">
+    
+    <!-- Top Header Navigation -->
+    <header class="vis-header">
+      <div class="vis-track-info">
+        @if (audioService.currentTrack()?.coverUrl) {
+          <img [src]="audioService.currentTrack()!.coverUrl" alt="" class="vis-track-cover" />
+        } @else {
+          <div class="vis-track-placeholder">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/>
+            </svg>
+          </div>
+        }
+        <div class="vis-track-meta">
+          <div class="vis-meta-top">
+            <span class="vis-title">{{ audioService.currentTrack()?.title || 'Нет активного трека' }}</span>
+            @if (audioService.currentTrack()?.format) {
+              <span class="vis-badge font-mono">{{ audioService.currentTrack()?.format | uppercase }}</span>
+            }
+            @if (audioService.isLiveStream()) {
+              <span class="vis-badge vis-badge-live font-mono">LIVE</span>
+            }
+          </div>
+          <span class="vis-artist">{{ audioService.currentTrack()?.artist || 'SIGNAL Stream Engine' }}</span>
+        </div>
+      </div>
+
+      <!-- Mode Switcher -->
+      <div class="vis-mode-pills font-mono">
+        <button 
+          class="vis-pill-btn" 
+          [class.active]="visualType() === 'bars'"
+          (click)="setVisualType('bars')"
+          title="Спектральный анализатор (1)"
+        >
+          СПЕКТР
+        </button>
+        <button 
+          class="vis-pill-btn" 
+          [class.active]="visualType() === 'wave'"
+          (click)="setVisualType('wave')"
+          title="Осциллограф / Волна (2)"
+        >
+          ВОЛНА
+        </button>
+        <button 
+          class="vis-pill-btn" 
+          [class.active]="visualType() === 'circle'"
+          (click)="setVisualType('circle')"
+          title="Круговой анализатор (3)"
+        >
+          КРУГ
+        </button>
+      </div>
+
+      <!-- Controls & Themes -->
+      <div class="vis-actions">
+        <!-- Theme Switcher -->
+        <div class="vis-theme-picker font-mono">
+          <button 
+            class="vis-theme-dot theme-signal" 
+            [class.active]="colorTheme() === 'signal'"
+            (click)="setColorTheme('signal')"
+            title="Тема: SIGNAL Silver"
+          ></button>
+          <button 
+            class="vis-theme-dot theme-cyan" 
+            [class.active]="colorTheme() === 'cyan'"
+            (click)="setColorTheme('cyan')"
+            title="Тема: Neon Cyan"
+          ></button>
+          <button 
+            class="vis-theme-dot theme-amber" 
+            [class.active]="colorTheme() === 'amber'"
+            (click)="setColorTheme('amber')"
+            title="Тема: Vintage Amber"
+          ></button>
+          <button 
+            class="vis-theme-dot theme-emerald" 
+            [class.active]="colorTheme() === 'emerald'"
+            (click)="setColorTheme('emerald')"
+            title="Тема: Studio Emerald"
+          ></button>
+        </div>
+
+        <!-- Fullscreen Button -->
+        <button class="vis-btn-icon" (click)="toggleFullscreen()" title="Полный экран (F)">
+          @if (isFullscreen()) {
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>
+            </svg>
+          } @else {
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+            </svg>
+          }
+        </button>
+
+        <!-- Close Button -->
+        <button class="vis-btn-icon vis-btn-close" (click)="close()" title="Закрыть (ESC)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Canvas Visualization Area -->
+    <main class="vis-canvas-stage">
+      <canvas #visCanvas class="vis-full-canvas"></canvas>
+
+      <!-- Center artwork pulse for circle mode -->
+      @if (visualType() === 'circle') {
+        <div class="vis-circle-center-art">
+          @if (audioService.currentTrack()?.coverUrl) {
+            <img [src]="audioService.currentTrack()!.coverUrl" alt="" class="circle-cover-img" />
+          } @else {
+            <div class="circle-cover-placeholder font-mono">
+              SIGNAL
+            </div>
+          }
+        </div>
+      }
+    </main>
+
+    <!-- Bottom Playback Dock -->
+    <footer class="vis-footer">
+      <div class="vis-playback-wrap">
+        
+        <!-- Progress scrubber -->
+        <div class="vis-scrub-row font-mono">
+          <span class="vis-time">
+            @if (audioService.isLiveStream()) { LIVE } @else { {{ formatTime(audioService.currentTime()) }} }
+          </span>
+          <div class="vis-slider-box">
+            @if (!audioService.isLiveStream()) {
+              <input 
+                type="range"
+                min="0"
+                [max]="audioService.duration() || 100"
+                step="1"
+                [value]="audioService.currentTime()"
+                (change)="audioService.seek(+($any($event.target).value))"
+                class="mono-slider"
+              />
+            } @else {
+              <div class="vis-live-line"></div>
+            }
+          </div>
+          <span class="vis-time">
+            @if (audioService.isLiveStream()) { ∞ } @else { {{ formatTime(audioService.duration()) }} }
+          </span>
+        </div>
+
+        <!-- Control Buttons -->
+        <div class="vis-controls-row">
+          <!-- Sensitivity Control -->
+          <div class="vis-sens-group font-mono">
+            <span class="vis-sens-label">GAIN</span>
+            <input 
+              type="range"
+              min="0.5"
+              max="2.5"
+              step="0.1"
+              [value]="sensitivity()"
+              (input)="sensitivity.set(+($any($event.target).value))"
+              class="mono-slider vis-sens-slider"
+              title="Чувствительность спектрографа"
+            />
+          </div>
+
+          <!-- Main Track Controls -->
+          <div class="vis-btn-group">
+            <button class="vis-ctrl-btn" (click)="audioService.prev()" title="Предыдущий трек">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="19 20 9 12 19 4 19 20"/>
+                <line x1="5" y1="19" x2="5" y2="5"/>
+              </svg>
+            </button>
+
+            <button class="vis-play-btn" (click)="audioService.togglePlay()" title="Воспроизведение / Пауза (Пробел)">
+              @if (audioService.isPlaying()) {
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <rect width="4" height="16" x="6" y="4" rx="1"/>
+                  <rect width="4" height="16" x="14" y="4" rx="1"/>
+                </svg>
+              } @else {
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <polygon points="6 3 20 12 6 21 6 3"/>
+                </svg>
+              }
+            </button>
+
+            <button class="vis-ctrl-btn" (click)="audioService.next()" title="Следующий трек">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="5 4 15 12 5 20 5 4"/>
+                <line x1="19" y1="5" x2="19" y2="19"/>
+              </svg>
+            </button>
+          </div>
+
+          <!-- Shortcuts Hint -->
+          <div class="vis-shortcuts font-mono desktop-only">
+            <span>[1-3] РЕЖИМЫ</span>
+            <span>[F] FULLSCREEN</span>
+            <span>[ESC] ЗАКРЫТЬ</span>
+          </div>
+        </div>
+
+      </div>
+    </footer>
+
+  </div>
+}

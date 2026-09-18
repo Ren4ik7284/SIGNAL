@@ -15,12 +15,13 @@ import { Track, Playlist, RadioStation } from './models/track.model';
 import { HeaderComponent } from './components/header/header.component';
 import { SidebarComponent } from './components/sidebar/sidebar.component';
 import { PlayerBarComponent } from './components/player-bar/player-bar.component';
+import { VisualizerComponent } from './components/visualizer/visualizer.component';
 import { OfflineService } from './services/offline.service';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, FormsModule, HeaderComponent, SidebarComponent, PlayerBarComponent],
+  imports: [CommonModule, FormsModule, HeaderComponent, SidebarComponent, PlayerBarComponent, VisualizerComponent],
   templateUrl: './app.html',
   styleUrl: './app.scss',
   encapsulation: ViewEncapsulation.None,
@@ -189,6 +190,14 @@ export class App implements OnInit {
         event.preventDefault();
         this.libraryService.toggleFavorite(current.id);
         this.showToast(current.isFavorite ? 'Удалено из избранного' : 'Добавлено в избранное');
+      }
+    } else if (event.key === 'v' || event.key === 'V' || event.key === 'м' || event.key === 'М') {
+      event.preventDefault();
+      this.audioService.toggleVisualizer();
+      this.showToast(this.audioService.isVisualizerOpen() ? 'Визуализатор открыт' : 'Визуализатор закрыт');
+    } else if (event.key === 'Escape') {
+      if (this.audioService.isVisualizerOpen()) {
+        this.audioService.closeVisualizer();
       }
     }
   }

@@ -211,6 +211,9 @@
       </div>
     </div>
 
+    <!-- Mini Visualizer (Desktop) -->
+    <app-visualizer [mode]="'mini'" class="desktop-only"></app-visualizer>
+
     <!-- Audio Effects Toggles -->
     <button 
       class="utility-btn" 
@@ -230,6 +233,16 @@
       style="padding: 0 6px; font-size: 11px; font-weight: 700; font-family: monospace;"
     >
       FADE
+    </button>
+
+    <button 
+      class="utility-btn" 
+      [class.active]="audioService.isVisualizerOpen()"
+      (click)="audioService.toggleVisualizer()"
+      [title]="audioService.isVisualizerOpen() ? 'Закрыть визуализатор (V)' : 'Открыть аудио-визуализатор спектра (V)'"
+      style="padding: 0 6px; font-size: 11px; font-weight: 700; font-family: monospace;"
+    >
+      VIS
     </button>
 
     <!-- Queue Drawer Toggle -->

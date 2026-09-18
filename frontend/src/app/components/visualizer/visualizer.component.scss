@@ -1,0 +1,429 @@
+// Mini Visualizer (in Player Bar)
+.vis-mini-container {
+  width: 96px;
+  height: 32px;
+  background: rgba(24, 24, 27, 0.7);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 4px;
+  overflow: hidden;
+  transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.1s ease;
+  flex-shrink: 0;
+
+  &:hover {
+    border-color: var(--border-muted);
+    background: rgba(39, 39, 42, 0.8);
+    transform: translateY(-1px);
+  }
+
+  .vis-mini-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+}
+
+// Fullscreen & Immersive Overlay
+.vis-fullscreen-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background-color: rgba(9, 9, 11, 0.95);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  display: flex;
+  flex-direction: column;
+  color: var(--text-primary);
+  user-select: none;
+  animation: visFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+
+  &.is-native-fullscreen {
+    background-color: #09090b;
+  }
+
+  // Header Bar
+  .vis-header {
+    height: 70px;
+    min-height: 70px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 32px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    gap: 16px;
+
+    .vis-track-info {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-width: 220px;
+      max-width: 380px;
+
+      .vis-track-cover,
+      .vis-track-placeholder {
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+        border-radius: 8px;
+        border: 1px solid var(--border-subtle);
+        object-fit: cover;
+        background: var(--bg-card);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-muted);
+      }
+
+      .vis-track-meta {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        overflow: hidden;
+
+        .vis-meta-top {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+
+          .vis-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+
+          .vis-badge {
+            font-size: 9px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            padding: 1px 5px;
+            border-radius: 4px;
+            color: var(--text-secondary);
+            letter-spacing: 0.04em;
+          }
+
+          .vis-badge-live {
+            background: rgba(239, 68, 68, 0.2);
+            border-color: rgba(239, 68, 68, 0.4);
+            color: #ef4444;
+            font-weight: 700;
+          }
+        }
+
+        .vis-artist {
+          font-size: 12px;
+          color: var(--text-secondary);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+      }
+    }
+
+    .vis-mode-pills {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: rgba(24, 24, 27, 0.8);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 3px;
+
+      .vis-pill-btn {
+        background: none;
+        border: none;
+        color: var(--text-secondary);
+        font-size: 11px;
+        font-weight: 600;
+        padding: 5px 14px;
+        border-radius: 6px;
+        cursor: pointer;
+        letter-spacing: 0.06em;
+        transition: background-color 0.12s ease, color 0.12s ease;
+
+        &:hover {
+          color: var(--text-primary);
+        }
+
+        &.active {
+          background: rgba(255, 255, 255, 0.12);
+          color: #fff;
+        }
+      }
+    }
+
+    .vis-actions {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+
+      .vis-theme-picker {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: rgba(24, 24, 27, 0.6);
+        border: 1px solid var(--border-subtle);
+        border-radius: 20px;
+        padding: 4px 8px;
+
+        .vis-theme-dot {
+          width: 14px;
+          height: 14px;
+          border-radius: 50%;
+          border: 1px solid transparent;
+          cursor: pointer;
+          transition: transform 0.12s ease, border-color 0.12s ease;
+
+          &.theme-signal { background: #e4e4e7; }
+          &.theme-cyan { background: #38bdf8; }
+          &.theme-amber { background: #fbbf24; }
+          &.theme-emerald { background: #34d399; }
+
+          &:hover {
+            transform: scale(1.15);
+          }
+
+          &.active {
+            border-color: #fff;
+            transform: scale(1.2);
+            box-shadow: 0 0 8px currentColor;
+          }
+        }
+      }
+
+      .vis-btn-icon {
+        background: rgba(24, 24, 27, 0.6);
+        border: 1px solid var(--border-subtle);
+        color: var(--text-secondary);
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+
+        &:hover {
+          color: var(--text-primary);
+          background: var(--bg-card-hover);
+          border-color: var(--border-muted);
+        }
+
+        &.vis-btn-close:hover {
+          background: rgba(239, 68, 68, 0.15);
+          color: #ef4444;
+          border-color: rgba(239, 68, 68, 0.3);
+        }
+      }
+    }
+  }
+
+  // Visualizer Stage
+  .vis-canvas-stage {
+    flex: 1;
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+
+    .vis-full-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .vis-circle-center-art {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 140px;
+      height: 140px;
+      border-radius: 50%;
+      overflow: hidden;
+      border: 2px solid rgba(255, 255, 255, 0.18);
+      box-shadow: 0 0 30px rgba(0, 0, 0, 0.8);
+      pointer-events: none;
+
+      .circle-cover-img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .circle-cover-placeholder {
+        width: 100%;
+        height: 100%;
+        background: #18181b;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 16px;
+        letter-spacing: 0.15em;
+        color: var(--text-muted);
+      }
+    }
+  }
+
+  // Footer Controls
+  .vis-footer {
+    padding: 16px 32px 24px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(9, 9, 11, 0.85);
+
+    .vis-playback-wrap {
+      max-width: 780px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+
+      .vis-scrub-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 11px;
+        color: var(--text-muted);
+
+        .vis-time {
+          min-width: 40px;
+          text-align: center;
+        }
+
+        .vis-slider-box {
+          flex: 1;
+          display: flex;
+          align-items: center;
+
+          .vis-live-line {
+            width: 100%;
+            height: 4px;
+            border-radius: 2px;
+            background: linear-gradient(90deg, rgba(239, 68, 68, 0.3), #ef4444);
+          }
+        }
+      }
+
+      .vis-controls-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+
+        .vis-sens-group {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 10px;
+          color: var(--text-muted);
+
+          .vis-sens-label {
+            letter-spacing: 0.05em;
+            font-weight: 600;
+          }
+
+          .vis-sens-slider {
+            width: 70px;
+          }
+        }
+
+        .vis-btn-group {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+
+          .vis-ctrl-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            padding: 6px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.12s ease;
+
+            &:hover {
+              color: var(--text-primary);
+            }
+          }
+
+          .vis-play-btn {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            background-color: var(--accent-white);
+            color: #000;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: transform 0.1s ease, opacity 0.12s ease;
+
+            &:hover {
+              opacity: 0.92;
+            }
+            &:active {
+              transform: scale(0.94);
+            }
+          }
+        }
+
+        .vis-shortcuts {
+          display: flex;
+          gap: 12px;
+          font-size: 10px;
+          color: var(--text-muted);
+          letter-spacing: 0.05em;
+        }
+      }
+    }
+  }
+}
+
+@keyframes visFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+// Mobile Breakpoint Adaptations
+@media (max-width: 768px) {
+  .vis-fullscreen-overlay {
+    .vis-header {
+      padding: 0 16px;
+      height: 60px;
+      min-height: 60px;
+
+      .vis-track-info {
+        max-width: 180px;
+      }
+
+      .vis-mode-pills .vis-pill-btn {
+        padding: 4px 8px;
+        font-size: 10px;
+      }
+    }
+
+    .vis-footer {
+      padding: 12px 16px 20px;
+    }
+  }
+}
