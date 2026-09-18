@@ -197,6 +197,10 @@ export class LibraryService {
     return this.tracks().filter((t) => this.offlineService.isTrackOffline(t.id)).length;
   });
 
+  readonly allTracksCount = computed(() => {
+    return this.tracks().filter((t) => !t.playlistOnly).length;
+  });
+
   readonly filteredTracks = computed(() => {
     const query = this.searchQuery().trim().toLowerCase();
     const genre = this.selectedGenre();
@@ -204,6 +208,7 @@ export class LibraryService {
     const playlistId = this.activePlaylistId();
 
     return this.tracks().filter((track) => {
+      if (view === 'all' && track.playlistOnly) return false;
       if (view === 'favorites' && !track.isFavorite) return false;
       if (view === 'uploads' && !track.isLocalUpload) return false;
       if (view === 'streams' && !track.isLiveStream && track.format !== 'stream') return false;
@@ -442,8 +447,12 @@ export class LibraryService {
       if (existing) {
         finalTrackIds.push(existing.id);
       } else {
-        newTracks.push(t);
-        finalTrackIds.push(t.id);
+        const playlistTrack: Track = {
+          ...t,
+          playlistOnly: true,
+        };
+        newTracks.push(playlistTrack);
+        finalTrackIds.push(playlistTrack.id);
       }
     }
 
@@ -625,21 +634,39 @@ export class LibraryService {
   }
 
   addTrackToLibrary(track: Track) {
-    const exists = this.tracks().some((t) => t.id === track.id || t.audioUrl === track.audioUrl);
-    if (!exists) {
-      this.tracks.update((cur) => [track, ...cur]);
+    const existing = this.tracks().find((t) => t.id === track.id || t.audioUrl === track.audioUrl);
+    if (!existing) {
+      this.tracks.update((cur) => [{ ...track, playlistOnly: false }, ...cur]);
+      this.persistTracks();
+    } else if (existing.playlistOnly) {
+      this.tracks.update((cur) =>
+        cur.map((t) => (t.id === existing.id ? { ...t, playlistOnly: false } : t))
+      );
       this.persistTracks();
     }
   }
 
   addMultipleTracks(tracks: Track[]) {
     const toAdd: Track[] = [];
+    const idsToUnmarkPlaylistOnly = new Set<string>();
+
     for (const t of tracks) {
-      const exists = this.tracks().some((x) => x.id === t.id || x.audioUrl === t.audioUrl);
-      if (!exists) toAdd.push(t);
+      const existing = this.tracks().find((x) => x.id === t.id || x.audioUrl === t.audioUrl);
+      if (!existing) {
+        toAdd.push({ ...t, playlistOnly: false });
+      } else if (existing.playlistOnly) {
+        idsToUnmarkPlaylistOnly.add(existing.id);
+      }
     }
-    if (toAdd.length > 0) {
-      this.tracks.update((cur) => [...toAdd, ...cur]);
+
+    if (toAdd.length > 0 || idsToUnmarkPlaylistOnly.size > 0) {
+      this.tracks.update((cur) => {
+        let updated = cur;
+        if (idsToUnmarkPlaylistOnly.size > 0) {
+          updated = updated.map((t) => (idsToUnmarkPlaylistOnly.has(t.id) ? { ...t, playlistOnly: false } : t));
+        }
+        return [...toAdd, ...updated];
+      });
       this.persistTracks();
     }
   }
@@ -864,12 +891,21 @@ export class LibraryService {
   }
 
   deletePlaylist(playlistId: string) {
+    const pl = this.playlists().find((p) => p.id === playlistId);
     this.playlists.update((pls) => pls.filter((p) => p.id !== playlistId));
     if (this.activePlaylistId() === playlistId) {
       this.activePlaylistId.set(null);
       this.selectedView.set('all');
     }
     this.persistPlaylists();
+
+    if (pl && pl.trackIds.length > 0) {
+      const otherTrackIds = new Set(this.playlists().flatMap((p) => p.trackIds));
+      this.tracks.update((tracks) =>
+        tracks.filter((t) => !(t.playlistOnly && pl.trackIds.includes(t.id) && !otherTrackIds.has(t.id)))
+      );
+      this.persistTracks();
+    }
   }
 
   toggleTrackInPlaylist(playlistId: string, trackId: string): boolean {

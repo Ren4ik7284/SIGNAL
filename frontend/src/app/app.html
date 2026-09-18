@@ -464,7 +464,7 @@
                 </svg>
               </div>
 
-              @if (libraryService.tracks().length === 0) {
+              @if (libraryService.allTracksCount() === 0) {
                 <h3 class="empty-title">Ваша медиатека пуста</h3>
                 <p class="empty-desc">Вставьте ссылку на YouTube (видео или плейлист) или найдите онлайн через Rust-бэкенд.</p>
                 <div class="empty-actions-row">

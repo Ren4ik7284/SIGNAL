@@ -16,6 +16,7 @@ export interface Track {
   isLocalUpload?: boolean;
   isLiveStream?: boolean;
   isOffline?: boolean;
+  playlistOnly?: boolean;
 }
 
 export interface Playlist {

@@ -299,11 +299,12 @@ export class App implements OnInit {
     if (!data || data.tracks.length === 0) return;
 
     const title = data.playlistTitle || 'YouTube Плейлист';
-    this.libraryService.importPlaylist(title, data.tracks);
-    this.showToast(`Импортировано ${data.tracks.length} треков в плейлист "${title}"`);
+    const createdPl = this.libraryService.importPlaylist(title, data.tracks);
+    this.showToast(`Создан плейлист "${title}" (${data.tracks.length} треков)`);
     this.isAddModalOpen.set(false);
     this.youtubeUrlInput.set('');
     this.extractedResult.set(null);
+    this.setView('playlist', createdPl.id);
   }
 
   addExtractedTracksToLibraryOnly() {
