@@ -64,38 +64,44 @@ pub fn apply_yt_dlp_common_args(cmd: &mut Command) {
             cmd.arg("--proxy").arg(p);
         }
     }
-    if let Some(cookies) = get_cookies_path() {
-        cmd.arg("--cookies").arg(cookies);
-    } else if has_chromium_profile() {
+    // If explicitly specified by environment variable, respect that first
+    if let Ok(env_cookies) = std::env::var("YT_COOKIES_PATH") {
+        if Path::new(&env_cookies).exists() {
+            cmd.arg("--cookies").arg(env_cookies);
+            return;
+        }
+    }
+    // On desktop, prefer live browser cookies directly to prevent stale/rotated session issues
+    if has_chromium_profile() {
         cmd.args(["--cookies-from-browser", "chromium"]);
+    } else if let Some(cookies) = get_cookies_path() {
+        cmd.arg("--cookies").arg(cookies);
     }
 }
 
 pub async fn ensure_cookies_on_start() {
-    if get_cookies_path().is_some() {
-        println!("[SIGNAL] YouTube cookies found.");
-        return;
-    }
     if !has_chromium_profile() {
         println!("[SIGNAL] Running in container or without Chromium profile, skipping cookie auto-export.");
         return;
     }
     let yt_cmd = get_yt_dlp_cmd();
-    println!("[SIGNAL] Cookies not found. Attempting auto-export from chromium...");
+    println!("[SIGNAL] Chromium profile detected. Refreshing cookies.txt from chromium...");
     let res = Command::new(&yt_cmd)
         .args([
             "--cookies",
             "cookies.txt",
             "--cookies-from-browser",
             "chromium",
+            "--playlist-items",
+            "0",
             "--skip-download",
-            "https://www.youtube.com",
+            "https://www.youtube.com/watch?v=3YZ5yuDByQg",
         ])
         .output()
         .await;
     match res {
         Ok(out) if out.status.success() => {
-            println!("[SIGNAL] Successfully exported YouTube cookies from chromium!");
+            println!("[SIGNAL] Successfully refreshed YouTube cookies from chromium!");
         }
         _ => {
             println!("[SIGNAL] Note: unable to auto-export cookies from chromium.");

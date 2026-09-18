@@ -403,20 +403,29 @@ export class LibraryService {
       tracks: { id: string; title: string; artist: string; duration: number; audio_url: string; cover_url?: string }[];
     } = await res.json();
 
-    const tracks: Track[] = (data.tracks || []).map((item) => ({
-      id: 'yt-' + item.id + '-' + Math.floor(Math.random() * 1000),
-      title: item.title,
-      artist: item.artist,
-      duration: Math.round(item.duration),
-      audioUrl: item.audio_url,
-      coverUrl: this.formatCoverUrl(item.cover_url),
-      genre: 'YouTube',
-      format: 'mp3',
-      bitrate: '192 kbps',
-      plays: 0,
-      isFavorite: false,
-      addedAt: new Date().toISOString().split('T')[0],
-    }));
+    const seenIds = new Set<string>();
+    const tracks: Track[] = [];
+
+    for (const item of data.tracks || []) {
+      const cleanId = 'yt-' + item.id;
+      if (seenIds.has(cleanId)) continue;
+      seenIds.add(cleanId);
+
+      tracks.push({
+        id: cleanId,
+        title: item.title,
+        artist: item.artist,
+        duration: Math.round(item.duration),
+        audioUrl: item.audio_url,
+        coverUrl: this.formatCoverUrl(item.cover_url),
+        genre: 'YouTube',
+        format: 'mp3',
+        bitrate: '192 kbps',
+        plays: 0,
+        isFavorite: false,
+        addedAt: new Date().toISOString().split('T')[0],
+      });
+    }
 
     return {
       playlistTitle: data.playlist_title,
@@ -426,10 +435,15 @@ export class LibraryService {
 
   importPlaylist(title: string, tracks: Track[]): Playlist {
     const newTracks: Track[] = [];
+    const finalTrackIds: string[] = [];
+
     for (const t of tracks) {
-      const exists = this.tracks().some((x) => x.id === t.id || x.audioUrl === t.audioUrl);
-      if (!exists) {
+      const existing = this.tracks().find((x) => x.id === t.id || x.audioUrl === t.audioUrl);
+      if (existing) {
+        finalTrackIds.push(existing.id);
+      } else {
         newTracks.push(t);
+        finalTrackIds.push(t.id);
       }
     }
 
@@ -438,11 +452,10 @@ export class LibraryService {
       this.persistTracks();
     }
 
-    const playlist = this.createPlaylist(title, `Импортировано: ${tracks.length} треков`);
-    const trackIds = tracks.map((t) => t.id);
+    const playlist = this.createPlaylist(title, `Импортировано: ${finalTrackIds.length} треков`);
 
     this.playlists.update((pls) =>
-      pls.map((p) => (p.id === playlist.id ? { ...p, trackIds } : p))
+      pls.map((p) => (p.id === playlist.id ? { ...p, trackIds: finalTrackIds } : p))
     );
     this.persistPlaylists();
 

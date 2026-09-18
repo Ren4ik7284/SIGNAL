@@ -67,11 +67,11 @@ pub async fn stream_audio(
         println!("[stream] Resolving audio stream for: {}", target);
         // 1. Direct extraction with yt-dlp
         let mut cmd = Command::new(&yt_cmd);
-        cmd.args(["-g", "-f", "bestaudio/ba/b"]);
+        cmd.args(["--no-playlist", "-g", "-f", "bestaudio/ba/b"]);
         apply_yt_dlp_common_args(&mut cmd);
         cmd.arg(&target);
 
-        if let Ok(Ok(out)) = tokio::time::timeout(Duration::from_secs(5), cmd.output()).await {
+        if let Ok(Ok(out)) = tokio::time::timeout(Duration::from_secs(8), cmd.output()).await {
             if out.status.success() {
                 let u = String::from_utf8_lossy(&out.stdout).trim().to_string();
                 if !u.is_empty() {
@@ -112,7 +112,7 @@ pub async fn stream_audio(
             println!("[stream] Getting track metadata for SoundCloud fallback search...");
             let mut info_cmd = Command::new(&yt_cmd);
             apply_yt_dlp_common_args(&mut info_cmd);
-            info_cmd.args(["--dump-json", "--flat-playlist", "--ignore-no-formats-error", &target]);
+            info_cmd.args(["--no-playlist", "--dump-json", "--flat-playlist", "--ignore-no-formats-error", &target]);
 
             let mut resolved_title = String::new();
             let mut resolved_uploader = String::new();

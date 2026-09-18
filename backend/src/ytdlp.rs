@@ -89,6 +89,8 @@ pub async fn execute_yt_dlp_search(yt_cmd: &str, search_arg: &str, timeout_sec: 
         search_arg,
         "--dump-json",
         "--flat-playlist",
+        "--playlist-end",
+        "50",
     ])
     .stdout(Stdio::piped())
     .stderr(Stdio::null());

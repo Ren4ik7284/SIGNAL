@@ -22,7 +22,7 @@ pub async fn search_music(Query(params): Query<SearchParams>) -> Result<Json<Vec
     println!("[search] Performing search for: {}", query);
 
     if is_direct_url {
-        let mut tracks = execute_yt_dlp_search(&yt_cmd, query, 8, &base_url).await;
+        let mut tracks = execute_yt_dlp_search(&yt_cmd, query, 15, &base_url).await;
         if tracks.is_empty() && !is_cloud_env() {
             let cloud_tracks = execute_cloud_search(query, &base_url).await;
             if !cloud_tracks.is_empty() {
@@ -85,6 +85,8 @@ pub async fn extract_info(Query(params): Query<ExtractParams>) -> Result<Json<Ex
         url,
         "--dump-json",
         "--flat-playlist",
+        "--playlist-end",
+        "100",
     ])
     .stdout(Stdio::piped())
     .stderr(Stdio::null());
@@ -121,13 +123,13 @@ pub async fn extract_info(Query(params): Query<ExtractParams>) -> Result<Json<Ex
         }
     };
 
-    let _ = tokio::time::timeout(Duration::from_secs(10), read_task).await;
+    let _ = tokio::time::timeout(Duration::from_secs(25), read_task).await;
     let _ = child.kill().await;
 
     // Fallback to cloud extract if local extraction yielded 0 items
     if tracks.is_empty() && !is_cloud_env() {
         let cloud_url = format!("{}/api/extract?url={}", CLOUD_FALLBACK_URL, urlencoding::encode(url));
-        if let Ok(client) = reqwest::Client::builder().timeout(Duration::from_secs(8)).build() {
+        if let Ok(client) = reqwest::Client::builder().timeout(Duration::from_secs(15)).build() {
             if let Ok(resp) = client.get(&cloud_url).send().await {
                 if resp.status().is_success() {
                     if let Ok(bytes) = resp.bytes().await {
