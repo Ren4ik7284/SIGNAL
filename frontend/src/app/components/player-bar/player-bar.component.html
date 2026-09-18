@@ -20,17 +20,42 @@
       </div>
       <span class="player-track-artist">{{ audioService.currentTrack()?.artist || 'Выберите трек для воспроизведения' }}</span>
     </div>
-    @if (audioService.currentTrack()) {
+    @if (audioService.currentTrack(); as cur) {
       <button 
         class="player-fav-btn" 
-        [class.favorited]="audioService.currentTrack()?.isFavorite"
-        (click)="libraryService.toggleFavorite(audioService.currentTrack()!.id)"
+        [class.favorited]="cur.isFavorite"
+        (click)="libraryService.toggleFavorite(cur.id)"
         title="В избранное (L)"
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" [attr.fill]="audioService.currentTrack()?.isFavorite ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
+        <svg width="16" height="16" viewBox="0 0 24 24" [attr.fill]="cur.isFavorite ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
           <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
         </svg>
       </button>
+
+      @if (!cur.isLiveStream) {
+        <button 
+          class="player-fav-btn" 
+          [class.favorited]="offlineService.isTrackOffline(cur.id)"
+          (click)="toggleOfflineTrack(cur)"
+          [title]="offlineService.isTrackOffline(cur.id) ? 'Сохранено оффлайн (нажмите для удаления)' : 'Скачать для оффлайн-прослушивания'"
+        >
+          @if (offlineService.isDownloading(cur.id)) {
+            <svg class="spin-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+            </svg>
+          } @else if (offlineService.isTrackOffline(cur.id)) {
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5">
+              <path d="M20 6 9 17l-5-5"/>
+            </svg>
+          } @else {
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+          }
+        </button>
+      }
     }
   </div>
 
@@ -182,6 +207,27 @@
         />
       </div>
     </div>
+
+    <!-- Audio Effects Toggles -->
+    <button 
+      class="utility-btn" 
+      [class.active]="audioService.isNormalizationEnabled()"
+      (click)="audioService.toggleNormalization()"
+      [title]="audioService.isNormalizationEnabled() ? 'Нормализация пиков громкости включена' : 'Нормализация выключена'"
+      style="padding: 0 6px; font-size: 11px; font-weight: 700; font-family: monospace;"
+    >
+      NORM
+    </button>
+
+    <button 
+      class="utility-btn" 
+      [class.active]="audioService.isCrossfadeEnabled()"
+      (click)="audioService.toggleCrossfade()"
+      [title]="audioService.isCrossfadeEnabled() ? 'Плавный кроссфейд (2.5с) включен' : 'Кроссфейд выключен'"
+      style="padding: 0 6px; font-size: 11px; font-weight: 700; font-family: monospace;"
+    >
+      FADE
+    </button>
 
     <!-- Queue Drawer Toggle -->
     <button 

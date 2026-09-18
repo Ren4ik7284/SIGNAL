@@ -11,17 +11,22 @@ import { FormsModule } from '@angular/forms';
 import { AudioService } from './services/audio.service';
 import { LibraryService } from './services/library.service';
 import { Track, Playlist, RadioStation } from './models/track.model';
+import { HeaderComponent } from './components/header/header.component';
+import { SidebarComponent } from './components/sidebar/sidebar.component';
+import { PlayerBarComponent } from './components/player-bar/player-bar.component';
+import { OfflineService } from './services/offline.service';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, HeaderComponent, SidebarComponent, PlayerBarComponent],
   templateUrl: './app.html',
   styleUrl: './app.scss',
 })
 export class App implements OnInit {
   readonly audioService = inject(AudioService);
   readonly libraryService = inject(LibraryService);
+  readonly offlineService = inject(OfflineService);
 
   readonly isAddModalOpen = signal<boolean>(false);
   readonly addModalTab = signal<'youtube' | 'search' | 'radio' | 'url' | 'file'>('youtube');
@@ -211,6 +216,27 @@ export class App implements OnInit {
   deleteTrack(track: Track) {
     this.libraryService.deleteTrack(track.id);
     this.showToast(`Трек "${track.title}" удален`);
+  }
+
+  async toggleOfflineTrack(track: Track, event?: Event) {
+    if (event) event.stopPropagation();
+    if (track.isLiveStream) {
+      this.showToast('Прямой эфир нельзя сохранить оффлайн');
+      return;
+    }
+
+    if (this.offlineService.isTrackOffline(track.id)) {
+      await this.offlineService.removeTrackOffline(track.id);
+      this.showToast('Трек удалён из оффлайн-хранилища');
+    } else {
+      this.showToast('Загрузка трека в кэш...');
+      const ok = await this.offlineService.saveTrackOffline(track);
+      if (ok) {
+        this.showToast('Трек сохранён для оффлайн-прослушивания!');
+      } else {
+        this.showToast('Ошибка при загрузке трека');
+      }
+    }
   }
 
   async triggerOnlineSearch() {

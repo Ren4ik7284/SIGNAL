@@ -3,6 +3,8 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AudioService } from '../../services/audio.service';
 import { LibraryService } from '../../services/library.service';
+import { OfflineService } from '../../services/offline.service';
+import { Track } from '../../models/track.model';
 
 @Component({
   selector: 'app-player-bar',
@@ -14,8 +16,17 @@ import { LibraryService } from '../../services/library.service';
 export class PlayerBarComponent {
   readonly audioService = inject(AudioService);
   readonly libraryService = inject(LibraryService);
+  readonly offlineService = inject(OfflineService);
 
   @Output() toggleQueueDrawer = new EventEmitter<void>();
+
+  async toggleOfflineTrack(track: Track) {
+    if (this.offlineService.isTrackOffline(track.id)) {
+      await this.offlineService.removeTrackOffline(track.id);
+    } else {
+      await this.offlineService.saveTrackOffline(track);
+    }
+  }
 
   // Scrubber Dragging State
   readonly isScrubbing = signal<boolean>(false);

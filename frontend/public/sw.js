@@ -31,6 +31,18 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Handle offline cached audio requests
+  if (url.pathname.startsWith('/offline-audio/')) {
+    event.respondWith(
+      caches.open('signal-offline-tracks-v1').then((cache) => {
+        return cache.match(event.request.url).then((cached) => {
+          return cached || fetch(event.request);
+        });
+      })
+    );
+    return;
+  }
+
   if (url.pathname.includes('/api/stream') || url.pathname.endsWith('.mp3') || url.pathname.endsWith('.aac') || url.pathname.endsWith('.m4a') || url.pathname.endsWith('.opus')) {
     return;
   }
