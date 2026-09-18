@@ -86,6 +86,10 @@ export class App implements OnInit {
   readonly playlistTitleInput = signal<string>('');
   readonly playlistDescInput = signal<string>('');
 
+  readonly isAddToPlaylistModalOpen = signal<boolean>(false);
+  readonly targetTrackForPlaylist = signal<Track | null>(null);
+  readonly isRefreshingLibrary = signal<boolean>(false);
+
   readonly isScrubbing = signal<boolean>(false);
   readonly scrubTime = signal<number>(0);
 
@@ -215,9 +219,64 @@ export class App implements OnInit {
     this.audioService.playTrack(track, this.libraryService.filteredTracks());
   }
 
-  deleteTrack(track: Track) {
-    this.libraryService.deleteTrack(track.id);
-    this.showToast(`Трек "${track.title}" удален`);
+  toggleFavorite(track: Track, event?: Event) {
+    if (event) event.stopPropagation();
+    this.libraryService.toggleFavorite(track.id);
+  }
+
+  addToQueue(track: Track, event?: Event) {
+    if (event) event.stopPropagation();
+    this.audioService.addToQueue(track);
+    this.showToast('Добавлено в очередь');
+  }
+
+  openAddToPlaylistModal(track: Track, event?: Event) {
+    if (event) event.stopPropagation();
+    this.targetTrackForPlaylist.set(track);
+    this.isAddToPlaylistModalOpen.set(true);
+  }
+
+  toggleTrackInPlaylistFromModal(playlist: Playlist) {
+    const track = this.targetTrackForPlaylist();
+    if (!track) return;
+    const isAdded = this.libraryService.toggleTrackInPlaylist(playlist.id, track.id);
+    this.showToast(
+      isAdded
+        ? `Трек добавлен в "${playlist.title}"`
+        : `Трек убран из "${playlist.title}"`
+    );
+  }
+
+  deleteTrack(track: Track, event?: Event) {
+    if (event) event.stopPropagation();
+
+    if (this.activeTab() === 'playlist' && this.currentPlaylist()) {
+      const pl = this.currentPlaylist()!;
+      this.libraryService.removeTrackFromPlaylist(pl.id, track.id);
+      this.showToast(`Трек убран из плейлиста "${pl.title}"`);
+    } else {
+      this.libraryService.deleteTrack(track.id);
+      this.showToast(`Трек "${track.title}" удален`);
+    }
+  }
+
+  async refreshLibrary() {
+    this.isRefreshingLibrary.set(true);
+    try {
+      await this.libraryService.syncWithBackendOnStartup();
+      this.showToast('Медиатека обновлена');
+    } catch {
+      this.showToast('Не удалось обновить медиатеку');
+    } finally {
+      this.isRefreshingLibrary.set(false);
+    }
+  }
+
+  clearAllLibraryTracks() {
+    if (confirm('Вы действительно хотите удалить все треки из медиатеки?')) {
+      this.libraryService.clearAllTracks();
+      this.showToast('Медиатека очищена');
+    }
   }
 
   async toggleOfflineTrack(track: Track, event?: Event) {

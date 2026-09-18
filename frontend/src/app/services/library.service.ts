@@ -875,6 +875,26 @@ export class LibraryService {
     this.persistPlaylists();
   }
 
+  removeTrackFromPlaylist(playlistId: string, trackId: string) {
+    this.playlists.update((pls) =>
+      pls.map((p) => (p.id === playlistId ? { ...p, trackIds: p.trackIds.filter((id) => id !== trackId) } : p))
+    );
+    this.persistPlaylists();
+
+    const otherTrackIds = new Set(this.playlists().flatMap((p) => p.trackIds));
+    if (!otherTrackIds.has(trackId)) {
+      this.tracks.update((tracks) => tracks.filter((t) => !(t.id === trackId && t.playlistOnly)));
+      this.persistTracks();
+    }
+  }
+
+  clearAllTracks() {
+    this.tracks.set([]);
+    this.playlists.update((pls) => pls.map((p) => ({ ...p, trackIds: [] })));
+    this.persistTracks();
+    this.persistPlaylists();
+  }
+
   createPlaylist(title: string, description?: string): Playlist {
     const cleanTitle = title.trim();
     const coverText = cleanTitle.slice(0, 2).toUpperCase();
