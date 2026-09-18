@@ -1,4 +1,6 @@
-const CACHE_NAME = 'signal-pwa-v1';
+const CACHE_NAME = 'signal-pwa-v3';
+const OFFLINE_AUDIO_CACHE = 'signal-offline-tracks-v1';
+
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -11,15 +13,20 @@ const ASSETS_TO_CACHE = [
 ];
 
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS_TO_CACHE)).then(() => self.skipWaiting())
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS_TO_CACHE)).catch(() => {})
   );
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)))
+      Promise.all(
+        keys
+          .filter((key) => key !== CACHE_NAME && key !== OFFLINE_AUDIO_CACHE)
+          .map((key) => caches.delete(key))
+      )
     ).then(() => self.clients.claim())
   );
 });
@@ -31,10 +38,10 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Handle offline cached audio requests
+  // 1. Handle offline cached audio requests
   if (url.pathname.startsWith('/offline-audio/')) {
     event.respondWith(
-      caches.open('signal-offline-tracks-v1').then((cache) => {
+      caches.open(OFFLINE_AUDIO_CACHE).then((cache) => {
         return cache.match(event.request.url).then((cached) => {
           return cached || fetch(event.request);
         });
@@ -43,28 +50,54 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  if (url.pathname.includes('/api/stream') || url.pathname.endsWith('.mp3') || url.pathname.endsWith('.aac') || url.pathname.endsWith('.m4a') || url.pathname.endsWith('.opus')) {
+  // 2. Do not cache live audio streams in the main PWA cache
+  if (
+    url.pathname.includes('/api/stream') ||
+    url.pathname.endsWith('.mp3') ||
+    url.pathname.endsWith('.aac') ||
+    url.pathname.endsWith('.m4a') ||
+    url.pathname.endsWith('.opus')
+  ) {
     return;
   }
 
-  if (url.origin === self.location.origin) {
+  // 3. For Navigation / HTML: ALWAYS NETWORK-FIRST so updates appear instantly!
+  if (
+    event.request.mode === 'navigate' ||
+    url.pathname === '/' ||
+    url.pathname === '/index.html'
+  ) {
     event.respondWith(
-      caches.match(event.request).then((cachedResponse) => {
-        if (cachedResponse) {
-          fetch(event.request).then((networkResponse) => {
-            if (networkResponse && networkResponse.status === 200) {
-              caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkResponse.clone()));
-            }
-          }).catch(() => {});
-          return cachedResponse;
-        }
-        return fetch(event.request).then((networkResponse) => {
+      fetch(event.request)
+        .then((networkResponse) => {
           if (networkResponse && networkResponse.status === 200) {
             const clone = networkResponse.clone();
             caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
           }
           return networkResponse;
-        });
+        })
+        .catch(() => {
+          return caches.match('/index.html').then((cached) => cached || caches.match('/'));
+        })
+    );
+    return;
+  }
+
+  // 4. For static assets (JS, CSS, Icons): Stale-while-revalidate
+  if (url.origin === self.location.origin) {
+    event.respondWith(
+      caches.match(event.request).then((cachedResponse) => {
+        const fetchPromise = fetch(event.request)
+          .then((networkResponse) => {
+            if (networkResponse && networkResponse.status === 200) {
+              const clone = networkResponse.clone();
+              caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+            }
+            return networkResponse;
+          })
+          .catch(() => cachedResponse);
+
+        return cachedResponse || fetchPromise;
       })
     );
   }

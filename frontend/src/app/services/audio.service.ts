@@ -93,6 +93,13 @@ export class AudioService {
   private initAudioContext() {
     if (this.isAudioGraphReady || typeof window === 'undefined') return;
 
+    // Mobile browsers (Chrome Android / iOS Safari) kill WebAudio graphs on screen lock.
+    // Keeping native HTML5 audio output on mobile guarantees the Lock Screen & Notification widget stays active.
+    const isMobile = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if (isMobile) {
+      return;
+    }
+
     try {
       const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioCtxClass) return;

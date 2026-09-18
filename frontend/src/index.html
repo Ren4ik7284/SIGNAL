@@ -20,7 +20,19 @@
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', function() {
-        navigator.serviceWorker.register('/sw.js').catch(function() {});
+        navigator.serviceWorker.register('/sw.js').then(function(reg) {
+          reg.update();
+          reg.onupdatefound = function() {
+            var installingWorker = reg.installing;
+            if (installingWorker) {
+              installingWorker.onstatechange = function() {
+                if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                  window.location.reload();
+                }
+              };
+            }
+          };
+        }).catch(function() {});
       });
     }
   </script>
