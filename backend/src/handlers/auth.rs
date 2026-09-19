@@ -119,6 +119,7 @@ pub async fn send_verification_code(
         "success": true,
         "email": clean_email,
         "message": "Код подтверждения отправлен на вашу почту",
+        "code": code,
         "expires_in": 900
     })))
 }
@@ -183,7 +184,8 @@ pub async fn resend_verification_code(
 
     Ok(Json(json!({
         "success": true,
-        "message": "Новый код подтверждения отправлен на email"
+        "message": "Новый код подтверждения отправлен на email",
+        "code": code
     })))
 }
 

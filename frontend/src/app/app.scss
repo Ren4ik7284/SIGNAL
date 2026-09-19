@@ -3691,6 +3691,45 @@
       }
     }
 
+    .code-quick-fill-card {
+      background: rgba(16, 185, 129, 0.08);
+      border: 1px dashed rgba(16, 185, 129, 0.4);
+      border-radius: 8px;
+      padding: 10px 12px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 3px;
+      transition: all 0.15s ease;
+
+      &:hover {
+        background: rgba(16, 185, 129, 0.15);
+        border-color: #10b981;
+      }
+
+      .code-quick-fill-badge {
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #10b981;
+      }
+
+      .code-quick-fill-val {
+        font-size: 20px;
+        font-weight: 800;
+        letter-spacing: 0.25em;
+        color: #34d399;
+      }
+
+      .code-quick-fill-sub {
+        font-size: 11px;
+        color: var(--text-secondary);
+      }
+    }
+
     .verify-code-input {
       font-size: 20px;
       letter-spacing: 0.35em;

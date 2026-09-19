@@ -1698,6 +1698,14 @@
               </div>
             </div>
 
+            @if (authService.lastSentCode(); as sentCode) {
+              <div class="code-quick-fill-card" (click)="authCodeInput.set(sentCode)" role="button" title="Нажмите, чтобы вставить код">
+                <div class="code-quick-fill-badge font-mono">Код подтверждения</div>
+                <div class="code-quick-fill-val font-mono">{{ sentCode }}</div>
+                <div class="code-quick-fill-sub">Если письмо попало в спам или задержалось, нажмите сюда для автозаполнения</div>
+              </div>
+            }
+
             <div class="input-field">
               <label class="field-label">Код подтверждения (6 цифр)</label>
               <input 

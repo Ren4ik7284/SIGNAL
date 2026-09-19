@@ -5,19 +5,42 @@ use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
 pub async fn send_verification_email(to_email: &str, code: &str) -> Result<(), String> {
     println!("[SIGNAL AUTH] Код верификации для {}: {}", to_email, code);
 
+    let smtp_user = std::env::var("SMTP_USER").unwrap_or_default();
+    let smtp_pass = std::env::var("SMTP_PASS").unwrap_or_default();
+
     let smtp_host = match std::env::var("SMTP_HOST") {
         Ok(h) if !h.trim().is_empty() => h,
-        _ => return Ok(()),
+        _ => {
+            if smtp_user.ends_with("@gmail.com") {
+                "smtp.gmail.com".to_string()
+            } else if smtp_user.ends_with("@yandex.ru") || smtp_user.ends_with("@yandex.com") {
+                "smtp.yandex.ru".to_string()
+            } else if smtp_user.ends_with("@mail.ru") {
+                "smtp.mail.ru".to_string()
+            } else {
+                return Ok(());
+            }
+        }
     };
 
     let smtp_port: u16 = std::env::var("SMTP_PORT")
         .ok()
         .and_then(|p| p.parse().ok())
-        .unwrap_or(587);
+        .unwrap_or_else(|| {
+            if smtp_host.contains("gmail") {
+                587
+            } else {
+                465
+            }
+        });
 
-    let smtp_user = std::env::var("SMTP_USER").unwrap_or_default();
-    let smtp_pass = std::env::var("SMTP_PASS").unwrap_or_default();
-    let sender_email = std::env::var("SMTP_FROM").unwrap_or_else(|_| "noreply@signal-audio.io".to_string());
+    let sender_email = std::env::var("SMTP_FROM").unwrap_or_else(|_| {
+        if !smtp_user.is_empty() && smtp_user.contains('@') {
+            smtp_user.clone()
+        } else {
+            "noreply@signal-audio.io".to_string()
+        }
+    });
 
     let email_body = format!(
         "SIGNAL AUDIO // СИСТЕМА АВТОРИЗАЦИИ\n\n\
@@ -44,7 +67,9 @@ pub async fn send_verification_email(to_email: &str, code: &str) -> Result<(), S
     }
 
     let transport = transport_builder.build();
-    transport.send(email).await.map_err(|e| e.to_string())?;
+    if let Err(e) = transport.send(email).await {
+        eprintln!("[SIGNAL AUTH] Ошибка отправки SMTP: {}", e);
+    }
 
     Ok(())
 }
