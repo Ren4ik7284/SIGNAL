@@ -17,7 +17,10 @@ pub async fn send_verification_email(to_email: &str, code: &str) -> Result<(), S
 
     if let Ok(resend_key) = std::env::var("RESEND_API_KEY") {
         if !resend_key.trim().is_empty() {
-            return send_via_resend_api(&resend_key, to_email, code).await;
+            match send_via_resend_api(&resend_key, to_email, code).await {
+                Ok(_) => return Ok(()),
+                Err(e) => eprintln!("[SIGNAL AUTH] Resend failed: {}", e),
+            }
         }
     }
 
@@ -62,7 +65,7 @@ async fn send_via_brevo_api(api_key: &str, to_email: &str, code: &str) -> Result
 
 async fn send_via_resend_api(api_key: &str, to_email: &str, code: &str) -> Result<(), String> {
     let client = reqwest::Client::new();
-    let sender = std::env::var("SMTP_FROM").unwrap_or_else(|_| "SIGNAL <onboarding@resend.dev>".to_string());
+    let sender = std::env::var("RESEND_FROM").unwrap_or_else(|_| "SIGNAL <onboarding@resend.dev>".to_string());
 
     let payload = json!({
         "from": sender,
