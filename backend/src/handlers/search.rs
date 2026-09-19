@@ -133,8 +133,8 @@ pub async fn extract_info(Query(params): Query<ExtractParams>) -> Result<Json<Ex
                                 let ch_duration = if end_time > start_time { end_time - start_time } else { 0.0 };
 
                                 let ch_id = format!("{}_ch_{}", vid, i + 1);
-                                let ch_audio_url = format!("{}/api/stream?url={}&ss={}", base_url, urlencoding::encode(&single_url), start_time as u64);
                                 let ch_artist = main_video.as_ref().map(|m| m.artist.clone()).unwrap_or_else(|| "Разные исполнители".to_string());
+                                let ch_audio_url = format!("{}/api/stream?url={}&ss={}&title={}&artist={}", base_url, urlencoding::encode(&single_url), start_time as u64, urlencoding::encode(ch_title), urlencoding::encode(&ch_artist));
                                 let ch_cover = main_video.as_ref().and_then(|m| m.cover_url.clone());
 
                                 chapter_tracks.push(SearchTrack {

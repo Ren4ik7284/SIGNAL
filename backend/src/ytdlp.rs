@@ -70,7 +70,12 @@ pub fn parse_track_json(item: &serde_json::Value, base_url: &str) -> Option<Sear
     });
 
     let encoded_url = urlencoding::encode(&track_url);
-    let audio_url = format!("{}/api/stream?url={}", base_url, encoded_url);
+    let encoded_title = urlencoding::encode(&title);
+    let encoded_artist = urlencoding::encode(&artist);
+    let audio_url = format!(
+        "{}/api/stream?url={}&title={}&artist={}",
+        base_url, encoded_url, encoded_title, encoded_artist
+    );
 
     Some(SearchTrack {
         id,

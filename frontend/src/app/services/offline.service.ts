@@ -58,7 +58,11 @@ export class OfflineService {
     this.downloadingTrackIds.set(currentDownloading);
 
     try {
-      const audioUrl = track.audioUrl;
+      let audioUrl = track.audioUrl;
+      if (audioUrl.includes('/api/stream') && !audioUrl.includes('title=')) {
+        const glue = audioUrl.includes('?') ? '&' : '?';
+        audioUrl = `${audioUrl}${glue}title=${encodeURIComponent(track.title || '')}&artist=${encodeURIComponent(track.artist || '')}`;
+      }
       const resp = await fetch(audioUrl, { mode: 'cors' });
       if (!resp.ok) {
         throw new Error(`Failed to download audio: ${resp.status}`);

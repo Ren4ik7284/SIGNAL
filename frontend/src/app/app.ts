@@ -452,7 +452,7 @@ export class App implements OnInit {
         title: item.track_title,
         artist: item.track_artist,
         duration: item.duration || 0,
-        audioUrl: `${this.libraryService.getBackendUrl()}/api/stream?id=${encodeURIComponent(item.track_id.replace(/^yt-/, ''))}`,
+        audioUrl: `${this.libraryService.getBackendUrl()}/api/stream?id=${encodeURIComponent(item.track_id.replace(/^yt-/, ''))}&title=${encodeURIComponent(item.track_title)}&artist=${encodeURIComponent(item.track_artist)}`,
         coverUrl: item.cover_url,
         genre: item.track_genre || 'Music',
         format: 'mp3',

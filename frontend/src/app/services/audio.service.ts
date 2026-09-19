@@ -451,7 +451,6 @@ export class AudioService {
     this.updateMediaSessionMetadata(track);
     this.updateMediaSessionPlaybackState('playing');
 
-    // 2. Check if track is cached offline in Cache API
     let playUrl = track.audioUrl;
     const offlineBlobUrl = await this.offlineService.getOfflineBlobUrl(track.id);
     if (offlineBlobUrl) {
@@ -469,6 +468,11 @@ export class AudioService {
     ) {
       const activeBase = this.libraryService.getBackendUrl();
       playUrl = `${activeBase}/api/stream?url=${encodeURIComponent(playUrl)}`;
+    }
+
+    if (playUrl.includes('/api/stream') && !playUrl.includes('title=')) {
+      const glue = playUrl.includes('?') ? '&' : '?';
+      playUrl = `${playUrl}${glue}title=${encodeURIComponent(track.title || '')}&artist=${encodeURIComponent(track.artist || '')}`;
     }
 
     this.audio.src = playUrl;
@@ -544,10 +548,13 @@ export class AudioService {
       return;
     }
 
-    // Otherwise proxy seek via &ss= query parameter
     const streamIdx = track.audioUrl.indexOf('/api/stream');
     const streamPath = streamIdx !== -1 ? track.audioUrl.slice(streamIdx) : track.audioUrl;
-    const baseStreamUrl = `${this.libraryService.getBackendUrl()}${streamPath}`.split('&ss=')[0];
+    let baseStreamUrl = `${this.libraryService.getBackendUrl()}${streamPath}`.split('&ss=')[0];
+    if (!baseStreamUrl.includes('title=')) {
+      const glue = baseStreamUrl.includes('?') ? '&' : '?';
+      baseStreamUrl = `${baseStreamUrl}${glue}title=${encodeURIComponent(track.title || '')}&artist=${encodeURIComponent(track.artist || '')}`;
+    }
     const ssParam = clamped > 0 ? `&ss=${Math.round(clamped)}` : '';
     const newUrl = `${baseStreamUrl}${ssParam}`;
 

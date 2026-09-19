@@ -15,6 +15,8 @@ pub struct StreamParams {
     pub url: Option<String>,
     pub id: Option<String>,
     pub ss: Option<u64>,
+    pub title: Option<String>,
+    pub artist: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

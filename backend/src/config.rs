@@ -56,7 +56,7 @@ pub fn apply_yt_dlp_common_args(cmd: &mut Command) {
         "--no-warnings",
         "--no-check-certificates",
         "--extractor-args",
-        "youtube:player_client=ios,web,android",
+        "youtube:player_client=android,web,ios",
     ]);
     if let Ok(proxy) = std::env::var("YOUTUBE_PROXY") {
         let p = proxy.trim();

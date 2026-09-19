@@ -65,13 +65,12 @@ pub async fn stream_audio(
         }
     } else {
         println!("[stream] Resolving audio stream for: {}", target);
-        // 1. Direct extraction with yt-dlp
         let mut cmd = Command::new(&yt_cmd);
         cmd.args(["--no-playlist", "-g", "-f", "bestaudio/ba/b"]);
         apply_yt_dlp_common_args(&mut cmd);
         cmd.arg(&target);
 
-        if let Ok(Ok(out)) = tokio::time::timeout(Duration::from_secs(8), cmd.output()).await {
+        if let Ok(Ok(out)) = tokio::time::timeout(Duration::from_secs(6), cmd.output()).await {
             if out.status.success() {
                 let u = String::from_utf8_lossy(&out.stdout).trim().to_string();
                 if !u.is_empty() {
@@ -80,14 +79,15 @@ pub async fn stream_audio(
             }
         }
 
-        // 2. Fallback to Cloud Proxy Stream if local extraction failed (e.g. YouTube blocked in Russia or bot-check)
         if direct_url.is_empty() && !is_cloud_env() {
             println!("[stream] Local extraction failed/blocked. Proxying stream from cloud backend...");
             let cloud_stream_url = format!(
-                "{}/api/stream?url={}{}",
+                "{}/api/stream?url={}{}{}{}",
                 CLOUD_FALLBACK_URL,
                 urlencoding::encode(&target),
-                params.ss.map(|s| format!("&ss={}", s)).unwrap_or_default()
+                params.ss.map(|s| format!("&ss={}", s)).unwrap_or_default(),
+                params.title.as_deref().map(|t| format!("&title={}", urlencoding::encode(t))).unwrap_or_default(),
+                params.artist.as_deref().map(|a| format!("&artist={}", urlencoding::encode(a))).unwrap_or_default()
             );
 
             if let Ok(client) = reqwest::Client::builder().timeout(Duration::from_secs(12)).build() {
@@ -107,44 +107,114 @@ pub async fn stream_audio(
             }
         }
 
-        // 3. Fallback to SoundCloud search
         if direct_url.is_empty() {
-            println!("[stream] Getting track metadata for SoundCloud fallback search...");
-            let mut info_cmd = Command::new(&yt_cmd);
-            apply_yt_dlp_common_args(&mut info_cmd);
-            info_cmd.args(["--no-playlist", "--dump-json", "--flat-playlist", "--ignore-no-formats-error", &target]);
+            let mut resolved_title = params.title.as_deref().unwrap_or("").trim().to_string();
+            let mut resolved_uploader = params.artist.as_deref().unwrap_or("").trim().to_string();
 
-            let mut resolved_title = String::new();
-            let mut resolved_uploader = String::new();
-
-            if let Ok(Ok(iout)) = tokio::time::timeout(Duration::from_secs(5), info_cmd.output()).await {
-                if let Ok(item) = serde_json::from_slice::<serde_json::Value>(&iout.stdout) {
-                    if let Some(t) = item["title"].as_str() {
-                        resolved_title = t.to_string();
+            if resolved_title.is_empty() {
+                let oembed_url = format!(
+                    "https://www.youtube.com/oembed?url={}&format=json",
+                    urlencoding::encode(&target)
+                );
+                if let Ok(client) = reqwest::Client::builder().timeout(Duration::from_secs(3)).build() {
+                    if let Ok(resp) = client.get(&oembed_url).send().await {
+                        if resp.status().is_success() {
+                            if let Ok(bytes) = resp.bytes().await {
+                                if let Ok(data) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+                                    if let Some(t) = data["title"].as_str() {
+                                        resolved_title = t.trim().to_string();
+                                    }
+                                    if let Some(a) = data["author_name"].as_str() {
+                                        resolved_uploader = a.trim().to_string();
+                                    }
+                                }
+                            }
+                        }
                     }
-                    if let Some(u) = item["uploader"]
-                        .as_str()
-                        .or_else(|| item["artist"].as_str())
-                        .or_else(|| item["channel"].as_str())
-                    {
-                        resolved_uploader = u.to_string();
+                }
+            }
+
+            if resolved_title.is_empty() {
+                let mut info_cmd = Command::new(&yt_cmd);
+                apply_yt_dlp_common_args(&mut info_cmd);
+                info_cmd.args(["--no-playlist", "--dump-json", "--flat-playlist", "--ignore-no-formats-error", &target]);
+
+                if let Ok(Ok(iout)) = tokio::time::timeout(Duration::from_secs(4), info_cmd.output()).await {
+                    if let Ok(item) = serde_json::from_slice::<serde_json::Value>(&iout.stdout) {
+                        if let Some(t) = item["title"].as_str() {
+                            resolved_title = t.to_string();
+                        }
+                        if let Some(u) = item["uploader"]
+                            .as_str()
+                            .or_else(|| item["artist"].as_str())
+                            .or_else(|| item["channel"].as_str())
+                        {
+                            resolved_uploader = u.to_string();
+                        }
                     }
                 }
             }
 
             if !resolved_title.is_empty() {
-                let sc_query = format!("scsearch1:{} {}", resolved_title, resolved_uploader);
-                println!("[stream] Trying SoundCloud search fallback: {}", sc_query);
+                let sc_query = if !resolved_uploader.is_empty() && !resolved_title.to_lowercase().contains(&resolved_uploader.to_lowercase()) {
+                    format!("scsearch1:{} {}", resolved_title, resolved_uploader)
+                } else {
+                    format!("scsearch1:{}", resolved_title)
+                };
+
+                println!("[stream] Trying SoundCloud fallback: {}", sc_query);
                 let mut sc_fallback = Command::new(&yt_cmd);
                 sc_fallback.args(["-g", "-f", "bestaudio/b"]);
                 apply_yt_dlp_common_args(&mut sc_fallback);
                 sc_fallback.arg(&sc_query);
 
-                if let Ok(Ok(sc)) = tokio::time::timeout(Duration::from_secs(5), sc_fallback.output()).await {
+                if let Ok(Ok(sc)) = tokio::time::timeout(Duration::from_secs(6), sc_fallback.output()).await {
                     if sc.status.success() {
                         let u = String::from_utf8_lossy(&sc.stdout).trim().to_string();
                         if !u.is_empty() {
                             direct_url = u;
+                        }
+                    }
+                }
+            }
+        }
+
+        if direct_url.is_empty() {
+            let vid = if let Some(idx) = target.find("v=") {
+                let rest = &target[idx + 2..];
+                let end = rest.find(['&', '?', '#', '/']).unwrap_or(rest.len());
+                Some(rest[..end].to_string())
+            } else if let Some(idx) = target.find("youtu.be/") {
+                let rest = &target[idx + 9..];
+                let end = rest.find(['&', '?', '#', '/']).unwrap_or(rest.len());
+                Some(rest[..end].to_string())
+            } else {
+                None
+            };
+
+            if let Some(v) = vid {
+                let inv_url = format!("https://inv.tux.pizza/api/v1/videos/{}", v);
+                if let Ok(client) = reqwest::Client::builder().timeout(Duration::from_secs(3)).build() {
+                    if let Ok(resp) = client.get(&inv_url).send().await {
+                        if resp.status().is_success() {
+                            if let Ok(bytes) = resp.bytes().await {
+                                if let Ok(data) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+                                    if let Some(formats) = data["adaptiveFormats"].as_array() {
+                                        for f in formats {
+                                            if let Some(t) = f["type"].as_str() {
+                                                if t.starts_with("audio/") {
+                                                    if let Some(u) = f["url"].as_str() {
+                                                        if !u.is_empty() {
+                                                            direct_url = u.to_string();
+                                                            break;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
