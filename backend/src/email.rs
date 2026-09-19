@@ -20,7 +20,10 @@ pub async fn send_verification_email(to_email: &str, code: &str) -> Result<(), S
         if !resend_key.trim().is_empty() {
             match send_via_resend_api(&resend_key, to_email, code).await {
                 Ok(_) => return Ok(()),
-                Err(e) => eprintln!("[SIGNAL AUTH] Resend failed: {}", e),
+                Err(e) => {
+                    eprintln!("[SIGNAL AUTH] Resend failed: {}", e);
+                    return Err(format!("Resend error: {}", e));
+                }
             }
         }
     }

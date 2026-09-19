@@ -161,16 +161,18 @@ export class AuthService {
       return false;
     }
 
+    const base = (backendUrl || '').trim().replace(/\/+$/, '') || 'https://signal-audio-backend-production.up.railway.app';
+
     try {
-      const res = await fetch(`${backendUrl}/api/auth/login`, {
+      const res = await fetch(`${base}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ login: cleanLogin, password: cleanPass }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
       if (!res.ok) {
-        this.authError.set(data.error || 'Ошибка входа в систему');
+        this.authError.set(data?.error || 'Ошибка входа в систему');
         return false;
       }
 
@@ -216,8 +218,10 @@ export class AuthService {
       return false;
     }
 
+    const base = (backendUrl || '').trim().replace(/\/+$/, '') || 'https://signal-audio-backend-production.up.railway.app';
+
     try {
-      const res = await fetch(`${backendUrl}/api/auth/send-code`, {
+      const res = await fetch(`${base}/api/auth/send-code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -227,13 +231,13 @@ export class AuthService {
         }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
       if (!res.ok) {
-        this.authError.set(data.error || 'Ошибка отправки кода');
+        this.authError.set(data?.error || 'Ошибка отправки кода');
         return false;
       }
 
-      if (data.fallback_code) {
+      if (data?.fallback_code) {
         this.fallbackCode.set(data.fallback_code);
       } else {
         this.fallbackCode.set(null);
@@ -261,8 +265,10 @@ export class AuthService {
       return false;
     }
 
+    const base = (backendUrl || '').trim().replace(/\/+$/, '') || 'https://signal-audio-backend-production.up.railway.app';
+
     try {
-      const res = await fetch(`${backendUrl}/api/auth/verify-code`, {
+      const res = await fetch(`${base}/api/auth/verify-code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -271,9 +277,9 @@ export class AuthService {
         }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
       if (!res.ok) {
-        this.authError.set(data.error || 'Неверный код подтверждения');
+        this.authError.set(data?.error || 'Неверный код подтверждения');
         return false;
       }
 
@@ -298,20 +304,22 @@ export class AuthService {
     this.isAuthLoading.set(true);
     this.authError.set(null);
 
+    const base = (backendUrl || '').trim().replace(/\/+$/, '') || 'https://signal-audio-backend-production.up.railway.app';
+
     try {
-      const res = await fetch(`${backendUrl}/api/auth/resend-code`, {
+      const res = await fetch(`${base}/api/auth/resend-code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim().toLowerCase() }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
       if (!res.ok) {
-        this.authError.set(data.error || 'Не удалось отправить код повторно');
+        this.authError.set(data?.error || 'Не удалось отправить код повторно');
         return false;
       }
 
-      if (data.fallback_code) {
+      if (data?.fallback_code) {
         this.fallbackCode.set(data.fallback_code);
       }
 
