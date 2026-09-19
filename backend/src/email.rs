@@ -8,6 +8,10 @@ pub async fn send_verification_email(to_email: &str, code: &str) -> Result<(), S
     let smtp_user = std::env::var("SMTP_USER").unwrap_or_default();
     let smtp_pass = std::env::var("SMTP_PASS").unwrap_or_default();
 
+    if smtp_user.is_empty() || smtp_pass.is_empty() {
+        return Err("На сервере не заданы SMTP_USER и SMTP_PASS для отправки писем".to_string());
+    }
+
     let smtp_host = match std::env::var("SMTP_HOST") {
         Ok(h) if !h.trim().is_empty() => h,
         _ => {
@@ -18,7 +22,7 @@ pub async fn send_verification_email(to_email: &str, code: &str) -> Result<(), S
             } else if smtp_user.ends_with("@mail.ru") {
                 "smtp.mail.ru".to_string()
             } else {
-                return Ok(());
+                return Err("Укажите SMTP_HOST в переменных окружения".to_string());
             }
         }
     };
@@ -69,6 +73,7 @@ pub async fn send_verification_email(to_email: &str, code: &str) -> Result<(), S
     let transport = transport_builder.build();
     if let Err(e) = transport.send(email).await {
         eprintln!("[SIGNAL AUTH] Ошибка отправки SMTP: {}", e);
+        return Err(format!("Ошибка доставки письма через SMTP: {}", e));
     }
 
     Ok(())

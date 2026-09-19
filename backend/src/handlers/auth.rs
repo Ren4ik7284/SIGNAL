@@ -113,13 +113,17 @@ pub async fn send_verification_code(
         )
     })?;
 
-    let _ = send_verification_email(&clean_email, &code).await;
+    if let Err(err_msg) = send_verification_email(&clean_email, &code).await {
+        return Err((
+            StatusCode::BAD_GATEWAY,
+            Json(json!({ "error": err_msg })),
+        ));
+    }
 
     Ok(Json(json!({
         "success": true,
         "email": clean_email,
         "message": "Код подтверждения отправлен на вашу почту",
-        "code": code,
         "expires_in": 900
     })))
 }
@@ -180,12 +184,16 @@ pub async fn resend_verification_code(
             )
         })?;
 
-    let _ = send_verification_email(&clean_email, &code).await;
+    if let Err(err_msg) = send_verification_email(&clean_email, &code).await {
+        return Err((
+            StatusCode::BAD_GATEWAY,
+            Json(json!({ "error": err_msg })),
+        ));
+    }
 
     Ok(Json(json!({
         "success": true,
-        "message": "Новый код подтверждения отправлен на email",
-        "code": code
+        "message": "Новый код подтверждения отправлен на email"
     })))
 }
 

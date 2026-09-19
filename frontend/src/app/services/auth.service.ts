@@ -71,7 +71,6 @@ export class AuthService {
   readonly isAuthenticated = computed(() => !!this.token() && !!this.currentUser());
   readonly isAuthLoading = signal<boolean>(false);
   readonly authError = signal<string | null>(null);
-  readonly lastSentCode = signal<string | null>(null);
 
   constructor() {
     this.restoreSession();
@@ -233,10 +232,6 @@ export class AuthService {
         return false;
       }
 
-      if (data.code) {
-        this.lastSentCode.set(data.code);
-      }
-
       return true;
     } catch {
       this.authError.set('Не удалось связаться с сервером');
@@ -307,10 +302,6 @@ export class AuthService {
       if (!res.ok) {
         this.authError.set(data.error || 'Не удалось отправить код повторно');
         return false;
-      }
-
-      if (data.code) {
-        this.lastSentCode.set(data.code);
       }
 
       return true;
