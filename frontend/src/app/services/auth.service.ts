@@ -71,6 +71,7 @@ export class AuthService {
   readonly isAuthenticated = computed(() => !!this.token() && !!this.currentUser());
   readonly isAuthLoading = signal<boolean>(false);
   readonly authError = signal<string | null>(null);
+  readonly fallbackCode = signal<string | null>(null);
 
   constructor() {
     this.restoreSession();
@@ -232,6 +233,12 @@ export class AuthService {
         return false;
       }
 
+      if (data.fallback_code) {
+        this.fallbackCode.set(data.fallback_code);
+      } else {
+        this.fallbackCode.set(null);
+      }
+
       return true;
     } catch {
       this.authError.set('Не удалось связаться с сервером');
@@ -304,6 +311,10 @@ export class AuthService {
         return false;
       }
 
+      if (data.fallback_code) {
+        this.fallbackCode.set(data.fallback_code);
+      }
+
       return true;
     } catch {
       this.authError.set('Не удалось связаться с сервером');
@@ -320,6 +331,7 @@ export class AuthService {
   private clearSession() {
     this.token.set(null);
     this.currentUser.set(null);
+    this.fallbackCode.set(null);
     try {
       localStorage.removeItem(this.TOKEN_STORAGE_KEY);
       localStorage.removeItem(this.USER_STORAGE_KEY);

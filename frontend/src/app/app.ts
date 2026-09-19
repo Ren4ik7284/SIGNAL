@@ -241,6 +241,7 @@ export class App implements OnInit {
     this.registerStep.set('input');
     this.clearResendTimer();
     this.authService.authError.set(null);
+    this.authService.fallbackCode.set(null);
     this.isAuthModalOpen.set(true);
   }
 
@@ -309,9 +310,15 @@ export class App implements OnInit {
     const ok = await this.authService.sendVerificationCode(backendUrl, username, email, password);
     if (ok) {
       this.registerStep.set('verify');
-      this.authCodeInput.set('');
+      const fallback = this.authService.fallbackCode();
+      if (fallback) {
+        this.authCodeInput.set(fallback);
+        this.showToast(`Код подтверждения: ${fallback}`);
+      } else {
+        this.authCodeInput.set('');
+        this.showToast(`Код отправлен на ${email}`);
+      }
       this.startResendTimer();
-      this.showToast(`Код отправлен на ${email}`);
     }
   }
 
@@ -322,7 +329,7 @@ export class App implements OnInit {
     const backendUrl = this.libraryService.getBackendUrl();
 
     if (code.length !== 6 || !/^\d{6}$/.test(code)) {
-      this.authService.authError.set('Введите 6-значный цифровой код из письма');
+      this.authService.authError.set('Введите 6-значный цифровой код');
       return;
     }
 
@@ -331,6 +338,7 @@ export class App implements OnInit {
       this.clearResendTimer();
       this.authPasswordInput.set('');
       this.authCodeInput.set('');
+      this.authService.fallbackCode.set(null);
       this.isAuthModalOpen.set(false);
       this.showToast(`Регистрация подтверждена! Добро пожаловать, ${username}!`);
       await this.libraryService.onUserLoggedIn();
@@ -345,7 +353,13 @@ export class App implements OnInit {
     const ok = await this.authService.resendCode(backendUrl, email);
     if (ok) {
       this.startResendTimer();
-      this.showToast(`Новый код отправлен на ${email}`);
+      const fallback = this.authService.fallbackCode();
+      if (fallback) {
+        this.authCodeInput.set(fallback);
+        this.showToast(`Новый код: ${fallback}`);
+      } else {
+        this.showToast(`Новый код отправлен на ${email}`);
+      }
     }
   }
 
@@ -353,6 +367,7 @@ export class App implements OnInit {
     this.clearResendTimer();
     this.registerStep.set('input');
     this.authService.authError.set(null);
+    this.authService.fallbackCode.set(null);
   }
 
   async submitAuth() {

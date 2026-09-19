@@ -5,6 +5,7 @@ use lettre::transport::smtp::client::{Tls, TlsParameters};
 use lettre::transport::smtp::extension::ClientId;
 use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
 use serde_json::json;
+use std::time::Duration;
 
 pub async fn send_verification_email(to_email: &str, code: &str) -> Result<(), String> {
     println!("[SIGNAL AUTH] Отправка кода верификации на: {}", to_email);
@@ -205,10 +206,16 @@ async fn send_via_smtp(to_email: &str, code: &str) -> Result<(), String> {
     }
 
     let transport = transport_builder.build();
-    if let Err(e) = transport.send(email).await {
-        eprintln!("[SIGNAL AUTH] Ошибка отправки SMTP: {}", e);
-        return Err(format!("Ошибка доставки письма через SMTP: {}", e));
+    let send_fut = transport.send(email);
+    match tokio::time::timeout(Duration::from_secs(3), send_fut).await {
+        Ok(Ok(_)) => Ok(()),
+        Ok(Err(e)) => {
+            eprintln!("[SIGNAL AUTH] Ошибка отправки SMTP: {}", e);
+            Err(format!("Ошибка доставки письма через SMTP: {}", e))
+        }
+        Err(_) => {
+            eprintln!("[SIGNAL AUTH] SMTP timeout");
+            Err("Таймаут подключения к SMTP серверу".to_string())
+        }
     }
-
-    Ok(())
 }

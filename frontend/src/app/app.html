@@ -1698,6 +1698,13 @@
               </div>
             </div>
 
+            @if (authService.fallbackCode(); as code) {
+              <div style="background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 8px; padding: 12px; margin-bottom: 12px; text-align: center;">
+                <div style="font-size: 11px; color: #a1a1aa; margin-bottom: 4px;">Код для быстрой активации:</div>
+                <div style="font-size: 24px; font-weight: 800; letter-spacing: 4px; color: #38bdf8; font-family: monospace;">{{ code }}</div>
+              </div>
+            }
+
             <div class="input-field">
               <label class="field-label">Код подтверждения (6 цифр)</label>
               <input 
