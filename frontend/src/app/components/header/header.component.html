@@ -11,7 +11,6 @@
     </div>
   </div>
 
-  <!-- Central Instant Search Input -->
   <div class="header-search">
     <div class="search-box">
       <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -47,15 +46,63 @@
     </div>
   </div>
 
-  <!-- Header Actions -->
   <div class="header-actions">
-    <!-- Backend Status Badge -->
     <div class="backend-status-pill font-mono" [class.online]="libraryService.isBackendOnline()" title="Статус Rust бэкенда на порту 8085">
       <span class="backend-dot"></span>
       <span>{{ libraryService.isBackendOnline() ? 'RUST ENGINE' : 'OFFLINE' }}</span>
     </div>
 
-    <!-- Add Track / URL Modal Trigger -->
+    @if (authService.isAuthenticated(); as isAuth) {
+      <div class="user-menu-container">
+        <button class="btn-user-profile font-mono" (click)="toggleUserMenu()">
+          <span class="user-avatar-badge">{{ authService.currentUser()?.username?.slice(0, 1)?.toUpperCase() }}</span>
+          <span class="user-name-text">{{ authService.currentUser()?.username }}</span>
+          <svg class="user-chevron" [class.open]="isUserMenuOpen()" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </button>
+
+        @if (isUserMenuOpen()) {
+          <div class="user-dropdown-menu" (click)="$event.stopPropagation()">
+            <div class="user-dropdown-header">
+              <div class="user-dh-name">{{ authService.currentUser()?.username }}</div>
+              <div class="user-dh-sub font-mono">ID: {{ authService.currentUser()?.id?.slice(0, 8) }}...</div>
+            </div>
+            <button class="user-dropdown-item wrapped-item" (click)="handleWrappedClick()">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+              </svg>
+              <span>SIGNAL Wrapped</span>
+              <span class="wrapped-badge font-mono">ИТОГИ</span>
+            </button>
+            <button class="user-dropdown-item" (click)="handleHistoryClick()">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+              </svg>
+              <span>История прослушиваний</span>
+            </button>
+            <div class="user-dropdown-divider"></div>
+            <button class="user-dropdown-item btn-logout" (click)="handleLogout()">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                <polyline points="16 17 21 12 16 7"/>
+                <line x1="21" y1="12" x2="9" y2="12"/>
+              </svg>
+              <span>Выйти</span>
+            </button>
+          </div>
+        }
+      </div>
+    } @else {
+      <button class="btn-auth-trigger font-mono" (click)="openAuthModal.emit()" title="Войти в систему">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+          <circle cx="12" cy="7" r="4"/>
+        </svg>
+        <span>Войти</span>
+      </button>
+    }
+
     <button class="btn-add-track" (click)="openAddModal.emit()">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <line x1="12" y1="5" x2="12" y2="19"/>

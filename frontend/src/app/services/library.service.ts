@@ -1,6 +1,7 @@
 import { Injectable, signal, computed, inject } from '@angular/core';
 import { Track, Playlist, RadioStation } from '../models/track.model';
 import { OfflineService } from './offline.service';
+import { AuthService, HistoryItem, WrappedStats } from './auth.service';
 
 export interface ExtractedResult {
   playlistTitle: string | null;
@@ -187,6 +188,7 @@ export class LibraryService {
   readonly playlists = signal<Playlist[]>([]);
   readonly radioStations = signal<RadioStation[]>([]);
   readonly offlineService = inject(OfflineService);
+  readonly authService = inject(AuthService);
   readonly searchQuery = signal<string>('');
   readonly selectedGenre = signal<string>('all');
   readonly selectedView = signal<'all' | 'favorites' | 'uploads' | 'streams' | 'playlist' | 'offline'>('all');
@@ -355,7 +357,7 @@ export class LibraryService {
         if (res.ok) {
           this.activeBackendUrl = testUrl;
           this.isBackendOnline.set(true);
-          console.log('[SIGNAL] Active backend connected:', testUrl);
+          this.authService.verifyRemoteSession(this.activeBackendUrl);
           return;
         }
       } catch {}
@@ -363,6 +365,7 @@ export class LibraryService {
 
     this.activeBackendUrl = this.FALLBACK_BACKEND_URL;
     this.isBackendOnline.set(true);
+    this.authService.verifyRemoteSession(this.activeBackendUrl);
   }
 
   async searchOnline(query: string): Promise<Track[]> {
@@ -587,7 +590,10 @@ export class LibraryService {
 
       const res = await fetch(`${this.activeBackendUrl}/api/sync`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...this.authService.getAuthHeaders(),
+        },
         body: JSON.stringify(payload),
       });
 
@@ -602,7 +608,9 @@ export class LibraryService {
   async syncWithBackendOnStartup() {
     if (!this.isBackendOnline()) return;
     try {
-      const res = await fetch(`${this.activeBackendUrl}/api/sync`);
+      const res = await fetch(`${this.activeBackendUrl}/api/sync`, {
+        headers: this.authService.getAuthHeaders(),
+      });
       if (!res.ok) return;
       const data = await res.json();
       if (!data) return;
@@ -1055,6 +1063,77 @@ export class LibraryService {
       playlistsCount: importedPlaylists,
       stationsCount: importedStations,
     };
+  }
+
+  async recordHistoryPlay(track: Track) {
+    if (!this.isBackendOnline()) return;
+    try {
+      await fetch(`${this.activeBackendUrl}/api/history`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...this.authService.getAuthHeaders(),
+        },
+        body: JSON.stringify({
+          track_id: track.id,
+          title: track.title,
+          artist: track.artist,
+          genre: track.genre,
+          cover_url: track.coverUrl,
+          duration: track.duration,
+        }),
+      });
+    } catch {}
+  }
+
+  async getHistory(): Promise<HistoryItem[]> {
+    if (!this.isBackendOnline()) return [];
+    try {
+      const res = await fetch(`${this.activeBackendUrl}/api/history`, {
+        headers: this.authService.getAuthHeaders(),
+      });
+      if (!res.ok) return [];
+      return await res.json();
+    } catch {
+      return [];
+    }
+  }
+
+  async clearHistory(): Promise<boolean> {
+    if (!this.isBackendOnline()) return false;
+    try {
+      const res = await fetch(`${this.activeBackendUrl}/api/history`, {
+        method: 'DELETE',
+        headers: this.authService.getAuthHeaders(),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  async getWrappedStats(): Promise<WrappedStats | null> {
+    if (!this.isBackendOnline()) return null;
+    try {
+      const res = await fetch(`${this.activeBackendUrl}/api/stats/wrapped`, {
+        headers: this.authService.getAuthHeaders(),
+      });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
+  }
+
+  async onUserLoggedIn() {
+    await this.syncWithBackendOnStartup();
+  }
+
+  onUserLoggedOut() {
+    this.tracks.set([...this.defaultTracks]);
+    this.playlists.set([]);
+    this.radioStations.set([...this.defaultRadioStations]);
+    this.saveLocalWithoutCloudSync();
   }
 }
 

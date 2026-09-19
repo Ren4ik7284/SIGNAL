@@ -14,3 +14,6 @@ cookies.txt
 backend/cookies.txt
 library.json
 backend/library.json
+*.db
+*.db-shm
+*.db-wal

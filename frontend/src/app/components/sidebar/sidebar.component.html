@@ -70,7 +70,26 @@
     </nav>
   </div>
 
-  <!-- Playlists Section -->
+  <div class="sidebar-section">
+    <div class="section-label">СТАТИСТИКА &amp; ИСТОРИЯ</div>
+    <nav class="sidebar-nav">
+      <button class="nav-item wrapped-nav-item" (click)="openWrapped.emit()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+        </svg>
+        <span>SIGNAL Wrapped</span>
+        <span class="count-badge font-mono wrapped-pill">ИТОГИ</span>
+      </button>
+
+      <button class="nav-item" (click)="openHistory.emit()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+        </svg>
+        <span>История</span>
+      </button>
+    </nav>
+  </div>
+
   <div class="sidebar-section playlists-section">
     <div class="section-label-row">
       <span class="section-label">ПЛЕЙЛИСТЫ</span>
@@ -100,11 +119,25 @@
     </div>
   </div>
 
-  <!-- Telemetry Footer in Sidebar -->
   <div class="sidebar-footer">
+    @if (authService.currentUser(); as u) {
+      <div class="sidebar-user-pill font-mono">
+        <span class="user-active-dot"></span>
+        <span class="user-active-name">{{ u.username }}</span>
+      </div>
+    } @else {
+      <button class="btn-sidebar-login font-mono" (click)="openAuth.emit()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+          <polyline points="10 17 15 12 10 7"/>
+          <line x1="15" y1="12" x2="3" y2="12"/>
+        </svg>
+        <span>Войти в аккаунт</span>
+      </button>
+    }
     <div class="engine-meta">
       <div class="engine-title">SIGNAL RUST ENGINE</div>
-      <div class="engine-sub">HTTP 206 Direct Stream Pipeline</div>
+      <div class="engine-sub">SQLite + SQLx Multi-Tenant</div>
     </div>
   </div>
 </aside>

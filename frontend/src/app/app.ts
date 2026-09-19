@@ -17,6 +17,7 @@ import { SidebarComponent } from './components/sidebar/sidebar.component';
 import { PlayerBarComponent } from './components/player-bar/player-bar.component';
 import { VisualizerComponent } from './components/visualizer/visualizer.component';
 import { OfflineService } from './services/offline.service';
+import { AuthService, HistoryItem, WrappedStats } from './services/auth.service';
 
 @Component({
   selector: 'app-root',
@@ -30,6 +31,26 @@ export class App implements OnInit {
   readonly audioService = inject(AudioService);
   readonly libraryService = inject(LibraryService);
   readonly offlineService = inject(OfflineService);
+  readonly authService = inject(AuthService);
+
+  readonly isAuthModalOpen = signal<boolean>(false);
+  readonly authModalTab = signal<'login' | 'register'>('login');
+  readonly authUsernameInput = signal<string>('');
+  readonly authEmailInput = signal<string>('');
+  readonly authPasswordInput = signal<string>('');
+  readonly authCodeInput = signal<string>('');
+  readonly registerStep = signal<'input' | 'verify'>('input');
+  readonly resendCountdown = signal<number>(0);
+  private resendTimer: any = null;
+  readonly showPassword = signal<boolean>(false);
+
+  readonly isWrappedModalOpen = signal<boolean>(false);
+  readonly wrappedStats = signal<WrappedStats | null>(null);
+  readonly isLoadingWrapped = signal<boolean>(false);
+
+  readonly isHistoryModalOpen = signal<boolean>(false);
+  readonly historyList = signal<HistoryItem[]>([]);
+  readonly isLoadingHistory = signal<boolean>(false);
 
   readonly isAddModalOpen = signal<boolean>(false);
   readonly addModalTab = signal<'youtube' | 'search' | 'radio' | 'url' | 'file'>('youtube');
@@ -209,6 +230,252 @@ export class App implements OnInit {
         this.toastMessage.set(null);
       }
     }, 3000);
+  }
+
+  openAuthModal(tab: 'login' | 'register' = 'login') {
+    this.authModalTab.set(tab);
+    this.authUsernameInput.set('');
+    this.authEmailInput.set('');
+    this.authPasswordInput.set('');
+    this.authCodeInput.set('');
+    this.registerStep.set('input');
+    this.clearResendTimer();
+    this.authService.authError.set(null);
+    this.isAuthModalOpen.set(true);
+  }
+
+  private startResendTimer() {
+    this.clearResendTimer();
+    this.resendCountdown.set(60);
+    this.resendTimer = setInterval(() => {
+      const current = this.resendCountdown();
+      if (current <= 1) {
+        this.clearResendTimer();
+      } else {
+        this.resendCountdown.set(current - 1);
+      }
+    }, 1000);
+  }
+
+  private clearResendTimer() {
+    if (this.resendTimer) {
+      clearInterval(this.resendTimer);
+      this.resendTimer = null;
+    }
+    this.resendCountdown.set(0);
+  }
+
+  async startRegistration() {
+    const username = this.authUsernameInput().trim();
+    const email = this.authEmailInput().trim().toLowerCase();
+    const password = this.authPasswordInput().trim();
+    const backendUrl = this.libraryService.getBackendUrl();
+
+    if (!username || !email || !password) {
+      this.authService.authError.set('Заполните все поля регистрации');
+      return;
+    }
+
+    if (this.authService.hasWhitespace(username)) {
+      this.authService.authError.set('Имя пользователя не должно содержать пробелы');
+      return;
+    }
+
+    if (this.authService.hasWhitespace(email)) {
+      this.authService.authError.set('Email не должен содержать пробелы');
+      return;
+    }
+
+    if (this.authService.hasWhitespace(password)) {
+      this.authService.authError.set('Пароль не должен содержать пробелы');
+      return;
+    }
+
+    if (!this.authService.isValidUsername(username)) {
+      this.authService.authError.set('Имя пользователя должно быть от 3 до 30 символов (латиница, цифры, _ и -)');
+      return;
+    }
+
+    if (!this.authService.isValidEmail(email)) {
+      this.authService.authError.set('Введите корректный адрес электронной почты (например, user@example.com)');
+      return;
+    }
+
+    if (!this.authService.isValidPassword(password)) {
+      this.authService.authError.set('Пароль должен содержать от 6 до 128 символов без пробелов');
+      return;
+    }
+
+    const ok = await this.authService.sendVerificationCode(backendUrl, username, email, password);
+    if (ok) {
+      this.registerStep.set('verify');
+      this.authCodeInput.set('');
+      this.startResendTimer();
+      this.showToast(`Код отправлен на ${email}`);
+    }
+  }
+
+  async confirmRegistrationCode() {
+    const email = this.authEmailInput().trim().toLowerCase();
+    const code = this.authCodeInput().trim();
+    const username = this.authUsernameInput().trim();
+    const backendUrl = this.libraryService.getBackendUrl();
+
+    if (code.length !== 6 || !/^\d{6}$/.test(code)) {
+      this.authService.authError.set('Введите 6-значный цифровой код из письма');
+      return;
+    }
+
+    const ok = await this.authService.verifyCode(backendUrl, email, code);
+    if (ok) {
+      this.clearResendTimer();
+      this.isAuthModalOpen.set(false);
+      this.showToast(`Регистрация подтверждена! Добро пожаловать, ${username}!`);
+      await this.libraryService.onUserLoggedIn();
+    }
+  }
+
+  async resendVerificationCode() {
+    if (this.resendCountdown() > 0 || this.authService.isAuthLoading()) return;
+    const email = this.authEmailInput().trim().toLowerCase();
+    const backendUrl = this.libraryService.getBackendUrl();
+
+    const ok = await this.authService.resendCode(backendUrl, email);
+    if (ok) {
+      this.startResendTimer();
+      this.showToast(`Новый код отправлен на ${email}`);
+    }
+  }
+
+  backToRegisterInputs() {
+    this.clearResendTimer();
+    this.registerStep.set('input');
+    this.authService.authError.set(null);
+  }
+
+  async submitAuth() {
+    const backendUrl = this.libraryService.getBackendUrl();
+
+    if (this.authModalTab() === 'login') {
+      const loginVal = this.authUsernameInput().trim();
+      const pass = this.authPasswordInput().trim();
+
+      if (!loginVal || !pass) {
+        this.authService.authError.set('Заполните логин/email и пароль');
+        return;
+      }
+
+      if (this.authService.hasWhitespace(loginVal)) {
+        this.authService.authError.set('Логин или email не должен содержать пробелы');
+        return;
+      }
+
+      if (this.authService.hasWhitespace(pass)) {
+        this.authService.authError.set('Пароль не должен содержать пробелы');
+        return;
+      }
+
+      const ok = await this.authService.login(backendUrl, loginVal, pass);
+      if (ok) {
+        this.isAuthModalOpen.set(false);
+        this.showToast(`Добро пожаловать, ${this.authService.currentUser()?.username || loginVal}!`);
+        await this.libraryService.onUserLoggedIn();
+      }
+    } else {
+      if (this.registerStep() === 'input') {
+        await this.startRegistration();
+      } else {
+        await this.confirmRegistrationCode();
+      }
+    }
+  }
+
+  async openWrappedModal() {
+    if (!this.authService.isAuthenticated()) {
+      this.showToast('Войдите в аккаунт для просмотра SIGNAL Wrapped');
+      this.openAuthModal('login');
+      return;
+    }
+
+    this.isLoadingWrapped.set(true);
+    this.isWrappedModalOpen.set(true);
+    try {
+      const stats = await this.libraryService.getWrappedStats();
+      this.wrappedStats.set(stats);
+    } catch {
+      this.showToast('Не удалось загрузить статистику');
+    } finally {
+      this.isLoadingWrapped.set(false);
+    }
+  }
+
+  async openHistoryModal() {
+    if (!this.authService.isAuthenticated()) {
+      this.showToast('Войдите в аккаунт для просмотра истории');
+      this.openAuthModal('login');
+      return;
+    }
+
+    this.isLoadingHistory.set(true);
+    this.isHistoryModalOpen.set(true);
+    try {
+      const history = await this.libraryService.getHistory();
+      this.historyList.set(history);
+    } catch {
+      this.showToast('Не удалось загрузить историю');
+    } finally {
+      this.isLoadingHistory.set(false);
+    }
+  }
+
+  async clearListeningHistory() {
+    if (confirm('Очистить всю историю прослушиваний?')) {
+      const ok = await this.libraryService.clearHistory();
+      if (ok) {
+        this.historyList.set([]);
+        this.showToast('История прослушиваний очищена');
+      }
+    }
+  }
+
+  playFromHistory(item: HistoryItem) {
+    const existing = this.libraryService.tracks().find((t) => t.id === item.track_id);
+    if (existing) {
+      this.playTrack(existing);
+    } else {
+      const tempTrack: Track = {
+        id: item.track_id,
+        title: item.track_title,
+        artist: item.track_artist,
+        duration: item.duration || 0,
+        audioUrl: `${this.libraryService.getBackendUrl()}/api/stream?id=${encodeURIComponent(item.track_id.replace(/^yt-/, ''))}`,
+        coverUrl: item.cover_url,
+        genre: item.track_genre || 'Music',
+        format: 'mp3',
+        plays: 1,
+        isFavorite: false,
+        addedAt: new Date(item.played_at * 1000).toISOString().split('T')[0],
+      };
+      this.libraryService.addTrackToLibrary(tempTrack);
+      this.playTrack(tempTrack);
+    }
+    this.showToast(`Воспроизведение: ${item.track_title}`);
+  }
+
+  formatHistoryDate(timestampSecs: number): string {
+    if (!timestampSecs) return '';
+    const date = new Date(timestampSecs * 1000);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+
+    if (diffMins < 1) return 'Только что';
+    if (diffMins < 60) return `${diffMins} мин назад`;
+    
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours} ч назад`;
+
+    return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   }
 
   setView(view: 'all' | 'favorites' | 'uploads' | 'streams' | 'playlist' | 'offline', playlistId?: string) {

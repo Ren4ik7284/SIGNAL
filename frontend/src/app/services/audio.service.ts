@@ -483,6 +483,7 @@ export class AudioService {
         this.updateMediaSessionPlaybackState('playing');
         this.updateMediaSessionMetadata(track);
         this.updateMediaSessionPosition();
+        this.libraryService.recordHistoryPlay(track);
       })
       .catch((err) => {
         console.warn('[AudioService] play() error:', err);

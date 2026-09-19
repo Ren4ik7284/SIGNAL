@@ -1,6 +1,7 @@
 import { Component, EventEmitter, Input, Output, inject, ViewEncapsulation } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { LibraryService } from '../../services/library.service';
+import { AuthService } from '../../services/auth.service';
 
 @Component({
   selector: 'app-sidebar',
@@ -12,9 +13,13 @@ import { LibraryService } from '../../services/library.service';
 })
 export class SidebarComponent {
   readonly libraryService = inject(LibraryService);
+  readonly authService = inject(AuthService);
 
   @Input() activeTab: 'all' | 'favorites' | 'uploads' | 'streams' | 'playlist' | 'offline' = 'all';
 
   @Output() viewChange = new EventEmitter<{ view: string; playlistId?: string }>();
   @Output() createPlaylist = new EventEmitter<void>();
+  @Output() openWrapped = new EventEmitter<void>();
+  @Output() openHistory = new EventEmitter<void>();
+  @Output() openAuth = new EventEmitter<void>();
 }

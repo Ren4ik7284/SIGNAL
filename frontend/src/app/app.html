@@ -3,15 +3,19 @@
   <app-header-bar
     (openAddModal)="isAddModalOpen.set(true)"
     (openOnlineSearch)="openOnlineSearchWithQuery($event)"
+    (openAuthModal)="openAuthModal()"
+    (openWrappedModal)="openWrappedModal()"
+    (openHistoryModal)="openHistoryModal()"
   ></app-header-bar>
 
   <div class="app-body">
-    
-    
     <app-sidebar
       [activeTab]="activeTab()"
       (viewChange)="setView($any($event.view), $event.playlistId)"
       (createPlaylist)="openCreatePlaylistModal()"
+      (openWrapped)="openWrappedModal()"
+      (openHistory)="openHistoryModal()"
+      (openAuth)="openAuthModal()"
     ></app-sidebar>
 
     
@@ -1516,6 +1520,478 @@
         <div class="modal-footer">
           <button class="btn-confirm-action" style="width: 100%; text-align: center;" (click)="isPwaModalOpen.set(false)">
             Понятно
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (isAuthModalOpen()) {
+    <div class="modal-backdrop" (click)="isAuthModalOpen.set(false)">
+      <div class="modal-dialog auth-dialog" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <div>
+            <h3 class="modal-title">{{ authModalTab() === 'login' ? 'Вход в аккаунт' : (registerStep() === 'verify' ? 'Подтверждение почты' : 'Регистрация в SIGNAL') }}</h3>
+            <p class="modal-subtitle">
+              @if (authModalTab() === 'login') {
+                Вход по логину или email
+              } @else if (registerStep() === 'verify') {
+                Введите 6-значный код, отправленный на {{ authEmailInput() }}
+              } @else {
+                Создание профиля с подтверждением через email
+              }
+            </p>
+          </div>
+          <button class="btn-close-sm" (click)="isAuthModalOpen.set(false)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="modal-nav-tabs auth-nav-tabs">
+          <button 
+            type="button"
+            class="modal-tab-btn" 
+            [class.active]="authModalTab() === 'login'"
+            (click)="authModalTab.set('login'); registerStep.set('input'); authService.authError.set(null)"
+          >
+            Вход
+          </button>
+          <button 
+            type="button"
+            class="modal-tab-btn" 
+            [class.active]="authModalTab() === 'register'"
+            (click)="authModalTab.set('register'); registerStep.set('input'); authService.authError.set(null)"
+          >
+            Регистрация
+          </button>
+        </div>
+
+        <div class="modal-body auth-modal-body">
+          @if (authService.authError(); as err) {
+            <div class="auth-error-banner font-mono">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+              <span>{{ err }}</span>
+            </div>
+          }
+
+          @if (authModalTab() === 'login') {
+            <div class="input-field">
+              <label class="field-label">Логин или Email</label>
+              <input 
+                type="text" 
+                placeholder="Имя пользователя или почта..." 
+                [ngModel]="authUsernameInput()"
+                (ngModelChange)="authUsernameInput.set($event)"
+                (keyup.enter)="submitAuth()"
+                class="form-text-input"
+                autofocus
+              />
+              <span class="field-hint">Без пробелов</span>
+            </div>
+
+            <div class="input-field">
+              <label class="field-label">Пароль</label>
+              <div class="password-input-wrap">
+                <input 
+                  [type]="showPassword() ? 'text' : 'password'" 
+                  placeholder="Ваш пароль..." 
+                  [ngModel]="authPasswordInput()"
+                  (ngModelChange)="authPasswordInput.set($event)"
+                  (keyup.enter)="submitAuth()"
+                  class="form-text-input"
+                />
+                <button 
+                  type="button" 
+                  class="btn-toggle-password" 
+                  (click)="showPassword.update(v => !v)"
+                  title="Показать / скрыть пароль"
+                >
+                  @if (showPassword()) {
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                      <line x1="1" y1="1" x2="23" y2="23"/>
+                    </svg>
+                  } @else {
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                      <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                  }
+                </button>
+              </div>
+            </div>
+          } @else if (registerStep() === 'input') {
+            <div class="input-field">
+              <label class="field-label">Имя пользователя (Логин)</label>
+              <input 
+                type="text" 
+                placeholder="Никнейм (от 3 символов, без пробелов)..." 
+                [ngModel]="authUsernameInput()"
+                (ngModelChange)="authUsernameInput.set($event)"
+                (keyup.enter)="submitAuth()"
+                class="form-text-input"
+                autofocus
+              />
+              <span class="field-hint">Только латиница, цифры, дефис и подчеркивание</span>
+            </div>
+
+            <div class="input-field">
+              <label class="field-label">Электронная почта (Email)</label>
+              <input 
+                type="email" 
+                placeholder="example@mail.com..." 
+                [ngModel]="authEmailInput()"
+                (ngModelChange)="authEmailInput.set($event)"
+                (keyup.enter)="submitAuth()"
+                class="form-text-input"
+              />
+              <span class="field-hint">На эту почту будет выслан цифровой код</span>
+            </div>
+
+            <div class="input-field">
+              <label class="field-label">Пароль</label>
+              <div class="password-input-wrap">
+                <input 
+                  [type]="showPassword() ? 'text' : 'password'" 
+                  placeholder="Минимум 6 символов без пробелов..." 
+                  [ngModel]="authPasswordInput()"
+                  (ngModelChange)="authPasswordInput.set($event)"
+                  (keyup.enter)="submitAuth()"
+                  class="form-text-input"
+                />
+                <button 
+                  type="button" 
+                  class="btn-toggle-password" 
+                  (click)="showPassword.update(v => !v)"
+                  title="Показать / скрыть пароль"
+                >
+                  @if (showPassword()) {
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                      <line x1="1" y1="1" x2="23" y2="23"/>
+                    </svg>
+                  } @else {
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                      <circle cx="12" cy="12" r="3"/>
+                    </svg>
+                  }
+                </button>
+              </div>
+            </div>
+          } @else {
+            <div class="verify-step-card">
+              <div class="verify-icon-wrap">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2">
+                  <path d="M22 17a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9.5C2 7 4 5 6.5 5H18c2.2 0 4 1.8 4 4v8Z"/>
+                  <polyline points="2 8 12 14 22 8"/>
+                </svg>
+              </div>
+              <div class="verify-info">
+                <div class="verify-sent-title">Письмо с кодом отправлено</div>
+                <div class="verify-email-label font-mono">{{ authEmailInput() }}</div>
+              </div>
+            </div>
+
+            <div class="input-field">
+              <label class="field-label">Код подтверждения (6 цифр)</label>
+              <input 
+                type="text" 
+                maxlength="6"
+                placeholder="••••••" 
+                [ngModel]="authCodeInput()"
+                (ngModelChange)="authCodeInput.set($event)"
+                (keyup.enter)="submitAuth()"
+                class="form-text-input verify-code-input font-mono"
+                autofocus
+              />
+              <span class="field-hint">Введите одноразовый цифровой код из письма</span>
+            </div>
+
+            <div class="verify-resend-row">
+              <button 
+                type="button" 
+                class="btn-text-sm"
+                [disabled]="resendCountdown() > 0 || authService.isAuthLoading()"
+                (click)="resendVerificationCode()"
+              >
+                @if (resendCountdown() > 0) {
+                  <span>Отправить повторно через {{ resendCountdown() }}с</span>
+                } @else {
+                  <span>Отправить код повторно</span>
+                }
+              </button>
+              <button type="button" class="btn-text-sm" (click)="backToRegisterInputs()">
+                Изменить email
+              </button>
+            </div>
+          }
+        </div>
+
+        <div class="modal-footer auth-modal-footer">
+          <button type="button" class="btn-cancel" (click)="isAuthModalOpen.set(false)">Отмена</button>
+          
+          @if (authModalTab() === 'login') {
+            <button 
+              type="button" 
+              class="btn-confirm-action" 
+              [disabled]="!authUsernameInput().trim() || !authPasswordInput().trim() || authService.isAuthLoading()"
+              (click)="submitAuth()"
+            >
+              @if (authService.isAuthLoading()) {
+                <span>Вход...</span>
+              } @else {
+                <span>Войти</span>
+              }
+            </button>
+          } @else if (registerStep() === 'input') {
+            <button 
+              type="button" 
+              class="btn-confirm-action" 
+              [disabled]="!authUsernameInput().trim() || !authEmailInput().trim() || !authPasswordInput().trim() || authService.isAuthLoading()"
+              (click)="submitAuth()"
+            >
+              @if (authService.isAuthLoading()) {
+                <span>Отправка кода...</span>
+              } @else {
+                <span>Получить код</span>
+              }
+            </button>
+          } @else {
+            <button 
+              type="button" 
+              class="btn-confirm-action" 
+              [disabled]="authCodeInput().trim().length !== 6 || authService.isAuthLoading()"
+              (click)="submitAuth()"
+            >
+              @if (authService.isAuthLoading()) {
+                <span>Проверка...</span>
+              } @else {
+                <span>Подтвердить и войти</span>
+              }
+            </button>
+          }
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (isWrappedModalOpen()) {
+    <div class="modal-backdrop" (click)="isWrappedModalOpen.set(false)">
+      <div class="modal-dialog wrapped-dialog" (click)="$event.stopPropagation()">
+        <div class="wrapped-dialog-header">
+          <div class="wrapped-badge-row">
+            <span class="wrapped-glow-tag font-mono">SIGNAL WRAPPED</span>
+            <span class="wrapped-year font-mono">2026</span>
+          </div>
+          <h2 class="wrapped-main-title">ТВОЙ МУЗЫКАЛЬНЫЙ ИТОГ</h2>
+          <p class="wrapped-user-sub font-mono">Слушатель: {{ wrappedStats()?.username || authService.currentUser()?.username }}</p>
+          <button class="btn-wrapped-close" (click)="isWrappedModalOpen.set(false)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="wrapped-dialog-body">
+          @if (isLoadingWrapped()) {
+            <div class="wrapped-loading-state font-mono">
+              <div class="wrapped-spinner"></div>
+              <span>Анализ частот и треков...</span>
+            </div>
+          } @else if (wrappedStats(); as ws) {
+            <div class="wrapped-stats-grid">
+              <div class="w-stat-card">
+                <span class="w-stat-val font-mono">{{ ws.total_plays }}</span>
+                <span class="w-stat-lbl">Всего воспроизведений</span>
+              </div>
+              <div class="w-stat-card highlight">
+                <span class="w-stat-val font-mono">{{ ws.total_minutes }}</span>
+                <span class="w-stat-lbl">Минут музыки</span>
+              </div>
+              <div class="w-stat-card">
+                <span class="w-stat-val font-mono">{{ ws.unique_tracks }}</span>
+                <span class="w-stat-lbl">Уникальных композиций</span>
+              </div>
+              <div class="w-stat-card">
+                <span class="w-stat-val font-mono">{{ ws.unique_artists }}</span>
+                <span class="w-stat-lbl">Исполнителей</span>
+              </div>
+            </div>
+
+            <div class="w-personality-card">
+              <div class="w-personality-badge font-mono">{{ ws.personality.tag }}</div>
+              <h3 class="w-personality-title">{{ ws.personality.title }}</h3>
+              <p class="w-personality-desc">{{ ws.personality.description }}</p>
+            </div>
+
+            @if (ws.top_tracks.length > 0) {
+              <div class="w-section-block">
+                <div class="w-block-title font-mono">ГЛАВНЫЙ ТРЕК ГОДА</div>
+                <div class="w-hero-track-card">
+                  <div class="w-hero-cover">
+                    @if (ws.top_tracks[0].cover_url) {
+                      <img [src]="ws.top_tracks[0].cover_url" alt="" />
+                    } @else {
+                      <div class="w-hero-placeholder">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
+                          <polygon points="6 3 20 12 6 21 6 3"/>
+                        </svg>
+                      </div>
+                    }
+                  </div>
+                  <div class="w-hero-info">
+                    <span class="w-rank-pill font-mono">#1 В ВАШЕМ ТОПЕ</span>
+                    <h4 class="w-hero-name">{{ ws.top_tracks[0].title }}</h4>
+                    <p class="w-hero-artist">{{ ws.top_tracks[0].artist }}</p>
+                    <span class="w-hero-count font-mono">{{ ws.top_tracks[0].plays }} прослушиваний</span>
+                  </div>
+                </div>
+              </div>
+
+              @if (ws.top_tracks.length > 1) {
+                <div class="w-section-block">
+                  <div class="w-block-title font-mono">ТОП ТРЕКОВ</div>
+                  <div class="w-ranked-list">
+                    @for (tr of ws.top_tracks.slice(1); track tr.track_id; let i = $index) {
+                      <div class="w-ranked-row">
+                        <span class="w-row-idx font-mono">#{{ i + 2 }}</span>
+                        @if (tr.cover_url) {
+                          <img [src]="tr.cover_url" alt="" class="w-row-thumb" />
+                        }
+                        <div class="w-row-info">
+                          <span class="w-row-name">{{ tr.title }}</span>
+                          <span class="w-row-sub">{{ tr.artist }}</span>
+                        </div>
+                        <span class="w-row-count font-mono">{{ tr.plays }}x</span>
+                      </div>
+                    }
+                  </div>
+                </div>
+              }
+            }
+
+            @if (ws.top_artists.length > 0) {
+              <div class="w-section-block">
+                <div class="w-block-title font-mono">ЛЮБИМЫЕ АРТИСТЫ</div>
+                <div class="w-artists-pills">
+                  @for (ar of ws.top_artists; track ar.artist; let i = $index) {
+                    <div class="w-artist-pill">
+                      <span class="w-artist-rank font-mono">#{{ i + 1 }}</span>
+                      <span class="w-artist-name">{{ ar.artist }}</span>
+                      <span class="w-artist-count font-mono">{{ ar.plays }}x</span>
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+
+            @if (ws.top_genres.length > 0) {
+              <div class="w-section-block">
+                <div class="w-block-title font-mono">ЖАНРОВАЯ КАРТА</div>
+                <div class="w-genres-bars">
+                  @for (g of ws.top_genres; track g.genre) {
+                    <div class="w-genre-bar-item">
+                      <div class="w-genre-meta">
+                        <span class="w-genre-name">{{ g.genre }}</span>
+                        <span class="w-genre-pct font-mono">{{ g.percentage }}%</span>
+                      </div>
+                      <div class="w-genre-track">
+                        <div class="w-genre-fill" [style.width.%]="g.percentage"></div>
+                      </div>
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+
+            @if (ws.total_plays === 0) {
+              <div class="w-empty-state">
+                <p class="w-empty-msg">В вашей истории пока нет записей. Включайте любимые треки, и они появятся в вашем персональном SIGNAL Wrapped!</p>
+              </div>
+            }
+          }
+        </div>
+
+        <div class="wrapped-dialog-footer">
+          <button class="btn-confirm-action" style="width: 100%; text-align: center;" (click)="isWrappedModalOpen.set(false)">
+            Закрыть
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (isHistoryModalOpen()) {
+    <div class="modal-backdrop" (click)="isHistoryModalOpen.set(false)">
+      <div class="modal-dialog history-dialog" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <div>
+            <h3 class="modal-title">История прослушиваний</h3>
+            <p class="modal-subtitle">Последние воспроизведённые композиции</p>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            @if (historyList().length > 0) {
+              <button class="btn-text-sm btn-danger-soft" (click)="clearListeningHistory()">Очистить</button>
+            }
+            <button class="btn-close-sm" (click)="isHistoryModalOpen.set(false)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="modal-body history-modal-body">
+          @if (isLoadingHistory()) {
+            <div class="history-loading font-mono">
+              <span class="loading-pulse"></span> Загрузка истории...
+            </div>
+          } @else if (historyList().length > 0) {
+            <div class="history-list">
+              @for (item of historyList(); track item.id) {
+                <div class="history-row" (click)="playFromHistory(item)">
+                  <div class="h-cover-wrap">
+                    @if (item.cover_url) {
+                      <img [src]="item.cover_url" alt="" class="h-cover-img" />
+                    } @else {
+                      <div class="h-cover-placeholder">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                          <polygon points="6 3 20 12 6 21 6 3"/>
+                        </svg>
+                      </div>
+                    }
+                  </div>
+                  <div class="h-meta">
+                    <span class="h-title">{{ item.track_title }}</span>
+                    <span class="h-artist">{{ item.track_artist }} • <span class="font-mono text-muted">{{ item.track_genre || 'Music' }}</span></span>
+                  </div>
+                  <span class="h-date font-mono text-muted">{{ formatHistoryDate(item.played_at) }}</span>
+                  <button class="btn-h-play" (click)="$event.stopPropagation(); playFromHistory(item)" title="Воспроизвести">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                      <polygon points="6 3 20 12 6 21 6 3"/>
+                    </svg>
+                  </button>
+                </div>
+              }
+            </div>
+          } @else {
+            <div class="empty-history-box">
+              <p>История пуста. Включите любой трек для записи.</p>
+            </div>
+          }
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn-cancel" style="width: 100%; text-align: center;" (click)="isHistoryModalOpen.set(false)">
+            Закрыть
           </button>
         </div>
       </div>
