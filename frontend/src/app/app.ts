@@ -329,6 +329,8 @@ export class App implements OnInit {
     const ok = await this.authService.verifyCode(backendUrl, email, code);
     if (ok) {
       this.clearResendTimer();
+      this.authPasswordInput.set('');
+      this.authCodeInput.set('');
       this.isAuthModalOpen.set(false);
       this.showToast(`Регистрация подтверждена! Добро пожаловать, ${username}!`);
       await this.libraryService.onUserLoggedIn();
@@ -377,6 +379,8 @@ export class App implements OnInit {
 
       const ok = await this.authService.login(backendUrl, loginVal, pass);
       if (ok) {
+        this.authPasswordInput.set('');
+        this.authCodeInput.set('');
         this.isAuthModalOpen.set(false);
         this.showToast(`Добро пожаловать, ${this.authService.currentUser()?.username || loginVal}!`);
         await this.libraryService.onUserLoggedIn();
