@@ -1,5 +1,6 @@
 use lettre::message::header::ContentType;
 use lettre::transport::smtp::authentication::Credentials;
+use lettre::transport::smtp::client::{Tls, TlsParameters};
 use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
 
 pub async fn send_verification_email(to_email: &str, code: &str) -> Result<(), String> {
@@ -63,8 +64,27 @@ pub async fn send_verification_email(to_email: &str, code: &str) -> Result<(), S
         .body(email_body)
         .map_err(|e| e.to_string())?;
 
-    let mut transport_builder = AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(&smtp_host)
-        .port(smtp_port);
+    let target_host = if let Ok(addrs) = tokio::net::lookup_host(format!("{}:{}", smtp_host, smtp_port)).await {
+        if let Some(v4) = addrs.into_iter().find(|a| a.is_ipv4()) {
+            v4.ip().to_string()
+        } else {
+            smtp_host.clone()
+        }
+    } else {
+        smtp_host.clone()
+    };
+
+    let tls_params = TlsParameters::new(smtp_host.clone())
+        .map_err(|e| format!("TLS error: {}", e))?;
+    let tls = if smtp_port == 465 {
+        Tls::Wrapper(tls_params)
+    } else {
+        Tls::Required(tls_params)
+    };
+
+    let mut transport_builder = AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(&target_host)
+        .port(smtp_port)
+        .tls(tls);
 
     if !smtp_user.is_empty() && !smtp_pass.is_empty() {
         transport_builder = transport_builder.credentials(Credentials::new(smtp_user, smtp_pass));
