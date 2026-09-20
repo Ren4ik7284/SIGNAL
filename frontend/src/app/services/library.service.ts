@@ -258,6 +258,12 @@ export class LibraryService {
   }
 
   getBackendUrl(): string {
+    if (typeof window !== 'undefined') {
+      const isRemoteHost = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+      if (isRemoteHost) {
+        return window.location.origin;
+      }
+    }
     const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
     if (isHttps && this.activeBackendUrl.startsWith('http://')) {
       return this.FALLBACK_BACKEND_URL;
@@ -337,29 +343,24 @@ export class LibraryService {
   }
 
   async checkBackendHealth() {
-    const savedBackend = typeof localStorage !== 'undefined' ? localStorage.getItem('signal_backend_url') : null;
     const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
     const hostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+    const isRemoteHost = hostname !== 'localhost' && hostname !== '127.0.0.1';
     const urlsToTest: string[] = [];
 
-    if (savedBackend && (!isHttps || savedBackend.startsWith('https://'))) {
-      urlsToTest.push(savedBackend);
-    }
-
-    if (isHttps) {
+    if (isRemoteHost && typeof window !== 'undefined') {
+      urlsToTest.push(window.location.origin);
+      urlsToTest.push(this.FALLBACK_BACKEND_URL);
+    } else if (isHttps) {
       urlsToTest.push(this.FALLBACK_BACKEND_URL);
     } else {
-      if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
-        urlsToTest.push(`http://${hostname}:8085`);
-      } else {
-        urlsToTest.push('http://localhost:8085');
-      }
+      urlsToTest.push('http://localhost:8085');
       urlsToTest.push(this.FALLBACK_BACKEND_URL);
     }
 
     for (const testUrl of urlsToTest) {
       try {
-        const res = await fetch(`${testUrl}/api/health`, { signal: AbortSignal.timeout(2000) });
+        const res = await fetch(`${testUrl}/api/health`, { signal: AbortSignal.timeout(3000) });
         if (res.ok) {
           this.activeBackendUrl = testUrl;
           this.isBackendOnline.set(true);
@@ -369,7 +370,7 @@ export class LibraryService {
       } catch {}
     }
 
-    this.activeBackendUrl = this.FALLBACK_BACKEND_URL;
+    this.activeBackendUrl = isRemoteHost && typeof window !== 'undefined' ? window.location.origin : this.FALLBACK_BACKEND_URL;
     this.isBackendOnline.set(true);
     this.authService.verifyRemoteSession(this.activeBackendUrl);
   }

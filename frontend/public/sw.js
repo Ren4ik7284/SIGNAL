@@ -1,4 +1,4 @@
-const CACHE_NAME = 'signal-pwa-v9';
+const CACHE_NAME = 'signal-pwa-v10';
 const OFFLINE_AUDIO_CACHE = 'signal-offline-tracks-v1';
 
 const ASSETS_TO_CACHE = [
@@ -37,7 +37,8 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  if (event.request.method !== 'GET') {
+  // Do not intercept non-GET requests or backend API requests
+  if (event.request.method !== 'GET' || url.pathname.startsWith('/api/')) {
     return;
   }
 

@@ -143,6 +143,12 @@ export class AuthService {
   }
 
   private getEffectiveBackendUrl(backendUrl?: string): string {
+    if (typeof window !== 'undefined') {
+      const isRemoteHost = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+      if (isRemoteHost) {
+        return window.location.origin;
+      }
+    }
     let base = (backendUrl || '').trim().replace(/\/+$/, '');
     const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
     if (isHttps && base.startsWith('http://')) {
