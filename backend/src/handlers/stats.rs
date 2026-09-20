@@ -62,7 +62,7 @@ pub async fn get_wrapped(
         r#"
         SELECT 
             COUNT(*) as total_plays,
-            COALESCE(SUM(duration), 0) as total_duration_secs,
+            CAST(COALESCE(SUM(duration), 0) AS REAL) as total_duration_secs,
             COUNT(DISTINCT track_id) as unique_tracks,
             COUNT(DISTINCT track_artist) as unique_artists
         FROM listening_history
@@ -79,11 +79,14 @@ pub async fn get_wrapped(
         )
     })?;
 
-    let total_plays: i64 = total_row.get("total_plays");
-    let total_duration_secs: f64 = total_row.get("total_duration_secs");
+    let total_plays: i64 = total_row.try_get("total_plays").unwrap_or(0);
+    let total_duration_secs: f64 = total_row
+        .try_get::<f64, _>("total_duration_secs")
+        .or_else(|_| total_row.try_get::<i64, _>("total_duration_secs").map(|v| v as f64))
+        .unwrap_or(0.0);
     let total_minutes = (total_duration_secs / 60.0).round() as i64;
-    let unique_tracks: i64 = total_row.get("unique_tracks");
-    let unique_artists: i64 = total_row.get("unique_artists");
+    let unique_tracks: i64 = total_row.try_get("unique_tracks").unwrap_or(0);
+    let unique_artists: i64 = total_row.try_get("unique_artists").unwrap_or(0);
 
     let track_rows = sqlx::query(
         r#"

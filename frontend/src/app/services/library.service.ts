@@ -258,7 +258,11 @@ export class LibraryService {
   }
 
   getBackendUrl(): string {
-    return this.activeBackendUrl;
+    const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+    if (isHttps && this.activeBackendUrl.startsWith('http://')) {
+      return this.FALLBACK_BACKEND_URL;
+    }
+    return this.activeBackendUrl || this.FALLBACK_BACKEND_URL;
   }
 
   private initLibrary() {
@@ -338,7 +342,9 @@ export class LibraryService {
     const hostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
     const urlsToTest: string[] = [];
 
-    if (savedBackend) urlsToTest.push(savedBackend);
+    if (savedBackend && (!isHttps || savedBackend.startsWith('https://'))) {
+      urlsToTest.push(savedBackend);
+    }
 
     if (isHttps) {
       urlsToTest.push(this.FALLBACK_BACKEND_URL);

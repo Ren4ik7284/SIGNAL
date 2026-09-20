@@ -142,6 +142,15 @@ export class AuthService {
     } catch {}
   }
 
+  private getEffectiveBackendUrl(backendUrl?: string): string {
+    let base = (backendUrl || '').trim().replace(/\/+$/, '');
+    const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+    if (isHttps && base.startsWith('http://')) {
+      base = 'https://signal-audio-backend-production.up.railway.app';
+    }
+    return base || 'https://signal-audio-backend-production.up.railway.app';
+  }
+
   async login(backendUrl: string, login: string, password: string): Promise<boolean> {
     this.isAuthLoading.set(true);
     this.authError.set(null);
@@ -167,7 +176,7 @@ export class AuthService {
       return false;
     }
 
-    const base = (backendUrl || '').trim().replace(/\/+$/, '') || 'https://signal-audio-backend-production.up.railway.app';
+    const base = this.getEffectiveBackendUrl(backendUrl);
 
     try {
       const res = await fetch(`${base}/api/auth/login`, {
@@ -191,7 +200,8 @@ export class AuthService {
       } catch {}
 
       return true;
-    } catch {
+    } catch (e: any) {
+      console.error('[SIGNAL AUTH LOGIN ERROR]', e);
       this.authError.set('Не удалось подключиться к серверу');
       return false;
     } finally {
@@ -230,7 +240,7 @@ export class AuthService {
       return false;
     }
 
-    const base = (backendUrl || '').trim().replace(/\/+$/, '') || 'https://signal-audio-backend-production.up.railway.app';
+    const base = this.getEffectiveBackendUrl(backendUrl);
 
     try {
       const res = await fetch(`${base}/api/auth/register`, {
@@ -254,7 +264,8 @@ export class AuthService {
       } catch {}
 
       return true;
-    } catch {
+    } catch (e: any) {
+      console.error('[SIGNAL AUTH REGISTER ERROR]', e);
       this.authError.set('Не удалось подключиться к серверу');
       return false;
     } finally {
