@@ -36,8 +36,8 @@ pub async fn search_music(Query(params): Query<SearchParams>) -> Result<Json<Vec
     let sc_arg = format!("scsearch10:{}", query);
 
     let (yt_res, sc_res) = tokio::join!(
-        execute_yt_dlp_search(&yt_cmd, &yt_arg, 4, &base_url),
-        execute_yt_dlp_search(&yt_cmd, &sc_arg, 4, &base_url),
+        execute_yt_dlp_search(&yt_cmd, &yt_arg, 12, &base_url),
+        execute_yt_dlp_search(&yt_cmd, &sc_arg, 12, &base_url),
     );
 
     let mut combined = Vec::new();
@@ -238,6 +238,50 @@ pub async fn extract_info(Query(params): Query<ExtractParams>) -> Result<Json<Ex
                                 }
                             }
                             return Ok(Json(ext_resp));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // If tracks are empty and main_video is None, but we have a YouTube video ID, use oEmbed fallback
+    if tracks.is_empty() && main_video.is_none() {
+        if let Some(ref vid) = video_id_opt {
+            let oembed_url = format!(
+                "https://www.youtube.com/oembed?url={}&format=json",
+                urlencoding::encode(&format!("https://www.youtube.com/watch?v={}", vid))
+            );
+            if let Ok(client) = reqwest::Client::builder().timeout(Duration::from_secs(5)).build() {
+                if let Ok(resp) = client.get(&oembed_url).send().await {
+                    if resp.status().is_success() {
+                        if let Ok(bytes) = resp.bytes().await {
+                            if let Ok(oembed) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+                                let raw_title = oembed["title"].as_str().unwrap_or("YouTube Track");
+                                let raw_author = oembed["author_name"].as_str().unwrap_or("YouTube Artist");
+                                let clean_artist = raw_author.replace(" - Topic", "");
+                                let cover = oembed["thumbnail_url"].as_str().map(|u| {
+                                    format!("{}/api/cover?url={}", base_url, urlencoding::encode(u))
+                                });
+                                let full_url = format!("https://www.youtube.com/watch?v={}", vid);
+                                let audio_url = format!(
+                                    "{}/api/stream?url={}&title={}&artist={}",
+                                    base_url,
+                                    urlencoding::encode(&full_url),
+                                    urlencoding::encode(raw_title),
+                                    urlencoding::encode(&clean_artist)
+                                );
+                                let fallback_track = SearchTrack {
+                                    id: vid.clone(),
+                                    title: raw_title.to_string(),
+                                    artist: clean_artist,
+                                    duration: 0.0,
+                                    audio_url,
+                                    cover_url: cover,
+                                };
+                                main_video = Some(fallback_track.clone());
+                                tracks.push(fallback_track);
+                            }
                         }
                     }
                 }

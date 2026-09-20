@@ -126,8 +126,9 @@ export class AuthService {
     const t = this.token();
     if (!t) return;
 
+    const base = this.getEffectiveBackendUrl(backendUrl);
     try {
-      const res = await fetch(`${backendUrl}/api/auth/me`, {
+      const res = await fetch(`${base}/api/auth/me`, {
         headers: this.getAuthHeaders(),
       });
       if (res.ok) {
@@ -306,7 +307,7 @@ export class AuthService {
       return false;
     }
 
-    const base = (backendUrl || '').trim().replace(/\/+$/, '') || 'https://signal-audio-backend-production.up.railway.app';
+    const base = this.getEffectiveBackendUrl(backendUrl);
 
     try {
       const res = await fetch(`${base}/api/auth/send-code`, {
@@ -353,7 +354,7 @@ export class AuthService {
       return false;
     }
 
-    const base = (backendUrl || '').trim().replace(/\/+$/, '') || 'https://signal-audio-backend-production.up.railway.app';
+    const base = this.getEffectiveBackendUrl(backendUrl);
 
     try {
       const res = await fetch(`${base}/api/auth/verify-code`, {
@@ -392,7 +393,7 @@ export class AuthService {
     this.isAuthLoading.set(true);
     this.authError.set(null);
 
-    const base = (backendUrl || '').trim().replace(/\/+$/, '') || 'https://signal-audio-backend-production.up.railway.app';
+    const base = this.getEffectiveBackendUrl(backendUrl);
 
     try {
       const res = await fetch(`${base}/api/auth/resend-code`, {
@@ -431,7 +432,7 @@ export class AuthService {
       return false;
     }
 
-    const base = (backendUrl || '').trim().replace(/\/+$/, '') || 'https://signal-audio-backend-production.up.railway.app';
+    const base = this.getEffectiveBackendUrl(backendUrl);
 
     try {
       const res = await fetch(`${base}/api/auth/reset-password-code`, {
@@ -481,7 +482,7 @@ export class AuthService {
       return false;
     }
 
-    const base = (backendUrl || '').trim().replace(/\/+$/, '') || 'https://signal-audio-backend-production.up.railway.app';
+    const base = this.getEffectiveBackendUrl(backendUrl);
 
     try {
       const res = await fetch(`${base}/api/auth/reset-password`, {

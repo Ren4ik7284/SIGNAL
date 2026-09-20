@@ -15,7 +15,10 @@ export interface ExtractedResult {
   providedIn: 'root',
 })
 export class LibraryService {
-  private activeBackendUrl = 'https://signal-audio-backend-production.up.railway.app';
+  private activeBackendUrl =
+    typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'
+      ? window.location.origin
+      : 'https://signal-audio-backend-production.up.railway.app';
   private readonly FALLBACK_BACKEND_URL = 'https://signal-audio-backend-production.up.railway.app';
   private readonly STORAGE_KEY_TRACKS = 'signal_music_user_tracks';
   private readonly STORAGE_KEY_FAVORITES = 'signal_music_favorites';
@@ -30,8 +33,8 @@ export class LibraryService {
       artist: 'ONDA ANDAR',
       album: 'Online Music',
       duration: 104,
-      audioUrl: 'https://signal-audio-backend-production.up.railway.app/api/stream?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3DSUCefsDmjk0&title=NO%20ESPERABA%20ESTO&artist=ONDA%20ANDAR',
-      coverUrl: 'https://signal-audio-backend-production.up.railway.app/api/cover?url=https%3A%2F%2Fi.ytimg.com%2Fvi%2FSUCefsDmjk0%2Fhq720.jpg',
+      audioUrl: '/api/stream?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3DSUCefsDmjk0&title=NO%20ESPERABA%20ESTO&artist=ONDA%20ANDAR',
+      coverUrl: '/api/cover?url=https%3A%2F%2Fi.ytimg.com%2Fvi%2FSUCefsDmjk0%2Fhq720.jpg',
       genre: 'Electronic',
       format: 'mp3',
       bitrate: '192 kbps',
@@ -45,8 +48,8 @@ export class LibraryService {
       artist: 'Scally Milano',
       album: 'Online Music',
       duration: 121,
-      audioUrl: 'https://signal-audio-backend-production.up.railway.app/api/stream?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3DHVXlDpNainw&title=%D0%9D%D0%B5%D0%B4%D0%BE%D0%B2%D0%BE%D0%BB%D0%B5%D0%BD&artist=Scally%20Milano',
-      coverUrl: 'https://signal-audio-backend-production.up.railway.app/api/cover?url=https%3A%2F%2Fi.ytimg.com%2Fvi%2FHVXlDpNainw%2Fhq720.jpg',
+      audioUrl: '/api/stream?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3DHVXlDpNainw&title=%D0%9D%D0%B5%D0%B4%D0%BE%D0%B2%D0%BE%D0%BB%D0%B5%D0%BD&artist=Scally%20Milano',
+      coverUrl: '/api/cover?url=https%3A%2F%2Fi.ytimg.com%2Fvi%2FHVXlDpNainw%2Fhq720.jpg',
       genre: 'Hip-Hop',
       format: 'mp3',
       bitrate: '192 kbps',
@@ -60,7 +63,7 @@ export class LibraryService {
       artist: 'wo',
       album: 'SoundCloud',
       duration: 150,
-      audioUrl: 'https://signal-audio-backend-production.up.railway.app/api/stream?url=https%3A%2F%2Fsoundcloud.com%2Fwwoowwoo%2Fvillian-madk1d-dinastiia',
+      audioUrl: '/api/stream?url=https%3A%2F%2Fsoundcloud.com%2Fwwoowwoo%2Fvillian-madk1d-dinastiia',
       coverUrl: 'https://i1.sndcdn.com/artworks-Z9NZvqkNSb4Z1xrV-E5zm9w-t500x500.jpg',
       genre: 'Electronic',
       format: 'mp3',
@@ -75,7 +78,7 @@ export class LibraryService {
       artist: 'SchuberTEKK',
       album: 'SoundCloud',
       duration: 252,
-      audioUrl: 'https://signal-audio-backend-production.up.railway.app/api/stream?url=https%3A%2F%2Fsoundcloud.com%2Forlando-267593096%2Fmania',
+      audioUrl: '/api/stream?url=https%3A%2F%2Fsoundcloud.com%2Forlando-267593096%2Fmania',
       coverUrl: 'https://i1.sndcdn.com/artworks-VxzuqknJ4ffnSJfg-aAYIYw-t500x500.jpg',
       genre: 'Techno',
       format: 'mp3',
@@ -334,10 +337,10 @@ export class LibraryService {
   formatCoverUrl(coverUrl?: string): string | undefined {
     if (!coverUrl) return undefined;
     if (coverUrl.startsWith('/')) {
-      return `${this.activeBackendUrl}${coverUrl}`;
+      return `${this.getBackendUrl()}${coverUrl}`;
     }
     if (coverUrl.includes('ytimg.com')) {
-      return `${this.activeBackendUrl}/api/cover?url=${encodeURIComponent(coverUrl)}`;
+      return `${this.getBackendUrl()}/api/cover?url=${encodeURIComponent(coverUrl)}`;
     }
     return coverUrl;
   }
@@ -384,7 +387,7 @@ export class LibraryService {
 
     this.isSearchingOnline.set(true);
     try {
-      const res = await fetch(`${this.activeBackendUrl}/api/search?q=${encodeURIComponent(q)}`);
+      const res = await fetch(`${this.getBackendUrl()}/api/search?q=${encodeURIComponent(q)}`);
       if (!res.ok) throw new Error('Search failed');
 
       const data: { id: string; title: string; artist: string; duration: number; audio_url: string; cover_url?: string }[] = await res.json();
@@ -418,7 +421,7 @@ export class LibraryService {
     const targetUrl = url.trim();
     if (!targetUrl) return { playlistTitle: null, tracks: [] };
 
-    const res = await fetch(`${this.activeBackendUrl}/api/extract?url=${encodeURIComponent(targetUrl)}`);
+    const res = await fetch(`${this.getBackendUrl()}/api/extract?url=${encodeURIComponent(targetUrl)}`);
     if (!res.ok) throw new Error('Extract failed');
 
     const data: {
@@ -595,7 +598,7 @@ export class LibraryService {
         radio_stations: this.radioStations(),
       };
 
-      const res = await fetch(`${this.activeBackendUrl}/api/sync`, {
+      const res = await fetch(`${this.getBackendUrl()}/api/sync`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -612,10 +615,10 @@ export class LibraryService {
     }
   }
 
-  async syncWithBackendOnStartup() {
+  async syncWithBackendOnStartup(forceCloud = false) {
     if (!this.isBackendOnline()) return;
     try {
-      const res = await fetch(`${this.activeBackendUrl}/api/sync`, {
+      const res = await fetch(`${this.getBackendUrl()}/api/sync`, {
         headers: this.authService.getAuthHeaders(),
       });
       if (!res.ok) return;
@@ -625,9 +628,15 @@ export class LibraryService {
       const cloudUpdatedAt = typeof data.updated_at === 'number' ? data.updated_at : 0;
       const localUpdatedAt = this.getLocalUpdatedAt();
       const localTracks = this.tracks();
+      const isOnlyDefaultTracks =
+        localTracks.length === 0 ||
+        localTracks.every((t) => t.id.startsWith('default-track-'));
 
-      if ((localTracks.length === 0 && Array.isArray(data.tracks) && data.tracks.length > 0) ||
-          (cloudUpdatedAt > localUpdatedAt && Array.isArray(data.tracks) && data.tracks.length > 0)) {
+      if (
+        Array.isArray(data.tracks) &&
+        data.tracks.length > 0 &&
+        (forceCloud || isOnlyDefaultTracks || cloudUpdatedAt > localUpdatedAt)
+      ) {
         this.tracks.set(data.tracks);
         if (Array.isArray(data.playlists)) this.playlists.set(data.playlists);
         if (Array.isArray(data.radio_stations) && data.radio_stations.length > 0) {
@@ -635,13 +644,13 @@ export class LibraryService {
         }
         this.saveLocalWithoutCloudSync();
         try {
-          localStorage.setItem(this.STORAGE_KEY_UPDATED_AT, cloudUpdatedAt.toString());
+          localStorage.setItem(this.STORAGE_KEY_UPDATED_AT, (cloudUpdatedAt || Date.now()).toString());
         } catch {}
         this.isCloudSynced.set(true);
         return;
       }
 
-      if (localTracks.length > 0 && (cloudUpdatedAt === 0 || localUpdatedAt > cloudUpdatedAt)) {
+      if (localTracks.length > 0 && !isOnlyDefaultTracks && (cloudUpdatedAt === 0 || localUpdatedAt > cloudUpdatedAt)) {
         await this.pushLibraryToBackend();
         return;
       }
@@ -1075,7 +1084,7 @@ export class LibraryService {
   async recordHistoryPlay(track: Track) {
     if (!this.isBackendOnline()) return;
     try {
-      await fetch(`${this.activeBackendUrl}/api/history`, {
+      await fetch(`${this.getBackendUrl()}/api/history`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1096,7 +1105,7 @@ export class LibraryService {
   async getHistory(): Promise<HistoryItem[]> {
     if (!this.isBackendOnline()) return [];
     try {
-      const res = await fetch(`${this.activeBackendUrl}/api/history`, {
+      const res = await fetch(`${this.getBackendUrl()}/api/history`, {
         headers: this.authService.getAuthHeaders(),
       });
       if (!res.ok) return [];
@@ -1109,7 +1118,7 @@ export class LibraryService {
   async clearHistory(): Promise<boolean> {
     if (!this.isBackendOnline()) return false;
     try {
-      const res = await fetch(`${this.activeBackendUrl}/api/history`, {
+      const res = await fetch(`${this.getBackendUrl()}/api/history`, {
         method: 'DELETE',
         headers: this.authService.getAuthHeaders(),
       });
@@ -1122,7 +1131,7 @@ export class LibraryService {
   async getWrappedStats(): Promise<WrappedStats | null> {
     if (!this.isBackendOnline()) return null;
     try {
-      const res = await fetch(`${this.activeBackendUrl}/api/stats/wrapped`, {
+      const res = await fetch(`${this.getBackendUrl()}/api/stats/wrapped`, {
         headers: this.authService.getAuthHeaders(),
       });
       if (!res.ok) return null;
@@ -1133,7 +1142,7 @@ export class LibraryService {
   }
 
   async onUserLoggedIn() {
-    await this.syncWithBackendOnStartup();
+    await this.syncWithBackendOnStartup(true);
   }
 
   onUserLoggedOut() {

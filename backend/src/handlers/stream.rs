@@ -55,7 +55,7 @@ pub async fn stream_audio(
         let mut sc_cmd = Command::new(&yt_cmd);
         apply_yt_dlp_common_args(&mut sc_cmd);
         sc_cmd.args(["-g", "-f", "bestaudio/b", &target]);
-        if let Ok(Ok(out)) = tokio::time::timeout(Duration::from_secs(6), sc_cmd.output()).await {
+        if let Ok(Ok(out)) = tokio::time::timeout(Duration::from_secs(15), sc_cmd.output()).await {
             if out.status.success() {
                 let u = String::from_utf8_lossy(&out.stdout).trim().to_string();
                 if !u.is_empty() {
@@ -70,7 +70,7 @@ pub async fn stream_audio(
         apply_yt_dlp_common_args(&mut cmd);
         cmd.arg(&target);
 
-        if let Ok(Ok(out)) = tokio::time::timeout(Duration::from_secs(6), cmd.output()).await {
+        if let Ok(Ok(out)) = tokio::time::timeout(Duration::from_secs(12), cmd.output()).await {
             if out.status.success() {
                 let u = String::from_utf8_lossy(&out.stdout).trim().to_string();
                 if !u.is_empty() {
@@ -156,8 +156,9 @@ pub async fn stream_audio(
             }
 
             if !resolved_title.is_empty() {
-                let sc_query = if !resolved_uploader.is_empty() && !resolved_title.to_lowercase().contains(&resolved_uploader.to_lowercase()) {
-                    format!("scsearch1:{} {}", resolved_title, resolved_uploader)
+                let clean_uploader = resolved_uploader.replace(" - Topic", "").trim().to_string();
+                let sc_query = if !clean_uploader.is_empty() && !resolved_title.to_lowercase().contains(&clean_uploader.to_lowercase()) {
+                    format!("scsearch1:{} {}", resolved_title, clean_uploader)
                 } else {
                     format!("scsearch1:{}", resolved_title)
                 };
@@ -168,7 +169,7 @@ pub async fn stream_audio(
                 apply_yt_dlp_common_args(&mut sc_fallback);
                 sc_fallback.arg(&sc_query);
 
-                if let Ok(Ok(sc)) = tokio::time::timeout(Duration::from_secs(6), sc_fallback.output()).await {
+                if let Ok(Ok(sc)) = tokio::time::timeout(Duration::from_secs(15), sc_fallback.output()).await {
                     if sc.status.success() {
                         let u = String::from_utf8_lossy(&sc.stdout).trim().to_string();
                         if !u.is_empty() {
@@ -228,11 +229,17 @@ pub async fn stream_audio(
     }
 
     println!("[stream] Direct audio URL resolved successfully, starting ffmpeg transcode...");
+    let referer = if direct_url.contains("soundcloud") || direct_url.contains("sndcdn") {
+        "https://soundcloud.com/"
+    } else {
+        "https://www.youtube.com/"
+    };
+
     let mut ffmpeg_args = vec![
         "-user_agent".to_string(),
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36".to_string(),
         "-referer".to_string(),
-        "https://www.youtube.com/".to_string(),
+        referer.to_string(),
         "-reconnect".to_string(),
         "1".to_string(),
         "-reconnect_streamed".to_string(),
