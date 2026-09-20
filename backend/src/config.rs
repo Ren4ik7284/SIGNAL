@@ -69,10 +69,8 @@ pub fn apply_yt_dlp_common_args(cmd: &mut Command) {
             return;
         }
     }
-    // On desktop, prefer live browser cookies directly to prevent stale/rotated session issues
-    if has_chromium_profile() {
-        cmd.args(["--cookies-from-browser", "chromium"]);
-    } else if let Some(cookies) = get_cookies_path() {
+    // Prefer cookies file (instant lookup) over --cookies-from-browser (which takes ~30s and triggers timeouts)
+    if let Some(cookies) = get_cookies_path() {
         cmd.arg("--cookies").arg(cookies);
     }
 }

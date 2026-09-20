@@ -895,19 +895,41 @@ export class App implements OnInit {
 
   async submitUrlTrack() {
     const url = this.inputUrl().trim();
-    if (!url) return;
+    const title = this.inputTitle().trim();
+    const artist = this.inputArtist().trim();
+
+    if (!url && !title) return;
 
     this.isUrlValidating.set(true);
     try {
-      const track = await this.libraryService.addStreamTrack(
-        url,
-        this.inputTitle() || undefined,
-        this.inputArtist() || undefined,
-        this.inputGenre() || undefined,
-        this.isLiveStreamCheckbox()
-      );
+      let track: Track;
+      if (!url && title) {
+        track = {
+          id: 'manual-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+          title,
+          artist: artist || 'Разные исполнители',
+          album: 'SIGNAL Music',
+          duration: 0,
+          audioUrl: `/api/stream?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}`,
+          genre: this.inputGenre() || 'Music',
+          format: 'mp3',
+          bitrate: '192 kbps',
+          plays: 0,
+          isFavorite: false,
+          addedAt: new Date().toISOString().split('T')[0],
+        };
+        this.libraryService.addTrackToLibrary(track);
+      } else {
+        track = await this.libraryService.addStreamTrack(
+          url,
+          title || undefined,
+          artist || undefined,
+          this.inputGenre() || undefined,
+          this.isLiveStreamCheckbox()
+        );
+      }
 
-      this.showToast(`Поток "${track.title}" добавлен`);
+      this.showToast(`Трек "${track.title}" добавлен`);
       this.isAddModalOpen.set(false);
       this.inputUrl.set('');
       this.inputTitle.set('');
@@ -915,10 +937,44 @@ export class App implements OnInit {
 
       this.audioService.playTrack(track, this.libraryService.tracks());
     } catch {
-      this.showToast('Ошибка подключения к потоку');
+      this.showToast('Ошибка при добавлении трека');
     } finally {
       this.isUrlValidating.set(false);
     }
+  }
+
+  addManualFromSearch() {
+    const q = this.modalSearchInput().trim();
+    if (!q) return;
+
+    let title = q;
+    let artist = 'Разные исполнители';
+    if (q.includes(' - ')) {
+      const parts = q.split(' - ');
+      artist = parts[0].trim();
+      title = parts.slice(1).join(' - ').trim();
+    }
+
+    const track: Track = {
+      id: 'manual-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+      title,
+      artist,
+      album: 'SIGNAL Music',
+      duration: 0,
+      audioUrl: `/api/stream?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}`,
+      genre: 'Music',
+      format: 'mp3',
+      bitrate: '192 kbps',
+      plays: 0,
+      isFavorite: false,
+      addedAt: new Date().toISOString().split('T')[0],
+    };
+
+    this.libraryService.addTrackToLibrary(track);
+    this.audioService.playTrack(track, this.libraryService.tracks());
+    this.showToast(`Трек "${track.title}" добавлен в медиатеку`);
+    this.isAddModalOpen.set(false);
+    this.modalSearchInput.set('');
   }
 
   onFileSelected(event: Event) {

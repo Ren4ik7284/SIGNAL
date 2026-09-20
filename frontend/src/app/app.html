@@ -907,7 +907,7 @@
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
             </svg>
-            <span>Прямой URL</span>
+            <span>Вручную / URL</span>
           </button>
         </div>
 
@@ -1143,6 +1143,14 @@
                       </div>
                     }
                   </div>
+                } @else if (modalSearchInput().trim()) {
+                  <div class="search-hint-box">
+                    <p class="hint-title">По запросу «{{ modalSearchInput() }}» ничего не найдено</p>
+                    <p class="hint-desc">Вы можете добавить этот трек вручную прямо в медиатеку:</p>
+                    <button class="btn-res-add" style="margin-top: 10px; display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; cursor: pointer;" (click)="addManualFromSearch()">
+                      + Добавить «{{ modalSearchInput() }}» в медиатеку
+                    </button>
+                  </div>
                 } @else {
                   <div class="search-hint-box">
                     <p class="hint-title">Быстрый поиск треков:</p>
@@ -1184,23 +1192,12 @@
           
           @if (addModalTab() === 'url') {
             <div class="tab-url-content">
-              <div class="input-field">
-                <label class="field-label">Прямая ссылка на аудиопоток (URL)</label>
-                <input 
-                  type="url" 
-                  placeholder="https://example.com/audio.mp3 или icecast-радио..."
-                  [ngModel]="inputUrl()"
-                  (ngModelChange)="inputUrl.set($event)"
-                  class="form-text-input"
-                />
-              </div>
-
               <div class="upload-fields-grid">
                 <div class="input-field">
-                  <label class="field-label">Название (опционально)</label>
+                  <label class="field-label">Название трека</label>
                   <input 
                     type="text" 
-                    placeholder="Название..."
+                    placeholder="Название трека (например: Numb, Группа крови)..."
                     [ngModel]="inputTitle()"
                     (ngModelChange)="inputTitle.set($event)"
                     class="form-text-input"
@@ -1211,7 +1208,7 @@
                   <label class="field-label">Исполнитель</label>
                   <input 
                     type="text" 
-                    placeholder="Исполнитель..."
+                    placeholder="Исполнитель (Linkin Park, Кино)..."
                     [ngModel]="inputArtist()"
                     (ngModelChange)="inputArtist.set($event)"
                     class="form-text-input"
@@ -1219,7 +1216,19 @@
                 </div>
               </div>
 
-              <label class="checkbox-label">
+              <div class="input-field" style="margin-top: 12px;">
+                <label class="field-label">Ссылка на аудиопоток или видео (опционально)</label>
+                <input 
+                  type="url" 
+                  placeholder="https://... (YouTube, SoundCloud, mp3 поток, радио)"
+                  [ngModel]="inputUrl()"
+                  (ngModelChange)="inputUrl.set($event)"
+                  class="form-text-input"
+                />
+                <span class="field-hint">Если ссылка не указана, аудиоплеер автоматически подберёт трек по названию и автору</span>
+              </div>
+
+              <label class="checkbox-label" style="margin-top: 10px;">
                 <input 
                   type="checkbox" 
                   [ngModel]="isLiveStreamCheckbox()"
@@ -1281,7 +1290,7 @@
           <button class="btn-cancel" (click)="isAddModalOpen.set(false)">Закрыть</button>
           
           @if (addModalTab() === 'url') {
-            <button class="btn-confirm-action" [disabled]="!inputUrl() || isUrlValidating()" (click)="submitUrlTrack()">
+            <button class="btn-confirm-action" [disabled]="(!inputUrl().trim() && !inputTitle().trim()) || isUrlValidating()" (click)="submitUrlTrack()">
               Подключить
             </button>
           } @else if (addModalTab() === 'file') {

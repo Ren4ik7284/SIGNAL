@@ -20,5 +20,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 COPY --from=builder /app/target/release/signal-audio-backend /app/
+COPY --from=builder /app/cookies.txt* /app/
 
 CMD ["./signal-audio-backend"]

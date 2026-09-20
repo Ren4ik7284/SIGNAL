@@ -452,27 +452,45 @@ export class AudioService {
     this.updateMediaSessionPlaybackState('playing');
 
     let playUrl = track.audioUrl;
-    const offlineBlobUrl = await this.offlineService.getOfflineBlobUrl(track.id);
-    if (offlineBlobUrl) {
-      playUrl = offlineBlobUrl;
-    } else if (playUrl.startsWith('/api/stream')) {
-      playUrl = `${this.libraryService.getBackendUrl()}${playUrl}`;
-    } else if (playUrl.includes('/api/stream')) {
-      const activeBase = this.libraryService.getBackendUrl();
-      const streamIdx = playUrl.indexOf('/api/stream');
-      playUrl = `${activeBase}${playUrl.slice(streamIdx)}`;
-    } else if (
-      typeof window !== 'undefined' &&
-      window.location.protocol === 'https:' &&
-      playUrl.startsWith('http://')
-    ) {
-      const activeBase = this.libraryService.getBackendUrl();
-      playUrl = `${activeBase}/api/stream?url=${encodeURIComponent(playUrl)}`;
+    if (this.offlineService.isTrackOffline(track.id)) {
+      const offlineBlobUrl = await this.offlineService.getOfflineBlobUrl(track.id);
+      if (offlineBlobUrl) {
+        playUrl = offlineBlobUrl;
+      }
     }
 
-    if (playUrl.includes('/api/stream') && !playUrl.includes('title=')) {
-      const glue = playUrl.includes('?') ? '&' : '?';
-      playUrl = `${playUrl}${glue}title=${encodeURIComponent(track.title || '')}&artist=${encodeURIComponent(track.artist || '')}`;
+    const activeBase = this.libraryService.getBackendUrl();
+
+    if (!playUrl.startsWith('blob:')) {
+      if (playUrl.startsWith('/api/stream')) {
+        playUrl = `${activeBase}${playUrl}`;
+      } else if (playUrl.includes('/api/stream')) {
+        const streamIdx = playUrl.indexOf('/api/stream');
+        playUrl = `${activeBase}${playUrl.slice(streamIdx)}`;
+      } else if (
+        playUrl.includes('youtube.com') ||
+        playUrl.includes('youtu.be') ||
+        playUrl.includes('soundcloud.com')
+      ) {
+        playUrl = `${activeBase}/api/stream?url=${encodeURIComponent(playUrl)}`;
+      } else if (
+        typeof window !== 'undefined' &&
+        window.location.protocol === 'https:' &&
+        playUrl.startsWith('http://')
+      ) {
+        playUrl = `${activeBase}/api/stream?url=${encodeURIComponent(playUrl)}`;
+      }
+
+      if (playUrl.includes('/api/stream')) {
+        if (!playUrl.includes('title=') && track.title) {
+          const glue = playUrl.includes('?') ? '&' : '?';
+          playUrl = `${playUrl}${glue}title=${encodeURIComponent(track.title)}`;
+        }
+        if (!playUrl.includes('artist=') && track.artist) {
+          const glue = playUrl.includes('?') ? '&' : '?';
+          playUrl = `${playUrl}${glue}artist=${encodeURIComponent(track.artist)}`;
+        }
+      }
     }
 
     this.audio.src = playUrl;

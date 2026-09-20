@@ -253,25 +253,42 @@ export class LibraryService {
   readonly isCloudSynced = signal<boolean>(false);
   private syncTimeout: any = null;
 
+  private syncPollInterval: any = null;
+
   constructor() {
     this.initLibrary();
     this.checkBackendHealth().then(() => {
       this.syncWithBackendOnStartup();
+      this.startAutoSync();
     });
   }
 
   getBackendUrl(): string {
-    if (typeof window !== 'undefined') {
-      const isRemoteHost = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
-      if (isRemoteHost) {
-        return window.location.origin;
-      }
-    }
     const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
     if (isHttps && this.activeBackendUrl.startsWith('http://')) {
       return this.FALLBACK_BACKEND_URL;
     }
     return this.activeBackendUrl || this.FALLBACK_BACKEND_URL;
+  }
+
+  startAutoSync() {
+    if (this.syncPollInterval || typeof window === 'undefined') return;
+
+    // Periodic sync every 5 seconds so mobile & PC instantly reflect added tracks
+    this.syncPollInterval = setInterval(() => {
+      this.syncWithBackendOnStartup();
+    }, 5000);
+
+    // Sync immediately on tab focus or screen unlock (mobile PWA / browser)
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        this.syncWithBackendOnStartup();
+      }
+    });
+
+    window.addEventListener('focus', () => {
+      this.syncWithBackendOnStartup();
+    });
   }
 
   private initLibrary() {
@@ -373,7 +390,7 @@ export class LibraryService {
       } catch {}
     }
 
-    this.activeBackendUrl = isRemoteHost && typeof window !== 'undefined' ? window.location.origin : this.FALLBACK_BACKEND_URL;
+    this.activeBackendUrl = this.FALLBACK_BACKEND_URL;
     this.isBackendOnline.set(true);
     this.authService.verifyRemoteSession(this.activeBackendUrl);
   }
@@ -650,25 +667,27 @@ export class LibraryService {
         return;
       }
 
+      // 2. Bidirectional merge: if cloud has tracks not in local, add them
+      if (Array.isArray(data.tracks) && data.tracks.length > 0) {
+        const currentTracks = this.tracks();
+        const localIds = new Set(currentTracks.map((t) => t.id));
+        const localUrls = new Set(currentTracks.map((t) => t.audioUrl));
+        const missingFromLocal = data.tracks.filter((t: Track) => !localIds.has(t.id) && !localUrls.has(t.audioUrl));
+        if (missingFromLocal.length > 0) {
+          this.tracks.update((cur) => [...missingFromLocal, ...cur]);
+          this.saveLocalWithoutCloudSync();
+        }
+      }
+
+      // 3. If local has tracks and cloud is behind, push local library to cloud
       if (localTracks.length > 0 && !isOnlyDefaultTracks && (cloudUpdatedAt === 0 || localUpdatedAt > cloudUpdatedAt)) {
         await this.pushLibraryToBackend();
         return;
       }
 
-      if (Array.isArray(data.tracks) && data.tracks.length > 0) {
-        const localIds = new Set(localTracks.map((t) => t.id));
-        const localUrls = new Set(localTracks.map((t) => t.audioUrl));
-        const missingFromLocal = data.tracks.filter((t: Track) => !localIds.has(t.id) && !localUrls.has(t.audioUrl));
-        if (missingFromLocal.length > 0) {
-          this.tracks.update((cur) => [...cur, ...missingFromLocal]);
-          this.saveLocalWithoutCloudSync();
-          await this.pushLibraryToBackend();
-        }
-      }
-
       this.isCloudSynced.set(true);
     } catch (e) {
-      console.warn('Initial cloud sync error:', e);
+      console.warn('Sync error:', e);
     }
   }
 
@@ -681,7 +700,6 @@ export class LibraryService {
         return t;
       })
     );
-
     const favs = this.tracks()
       .filter((t) => t.isFavorite)
       .map((t) => t.id);
@@ -694,11 +712,13 @@ export class LibraryService {
     if (!existing) {
       this.tracks.update((cur) => [{ ...track, playlistOnly: false }, ...cur]);
       this.persistTracks();
+      this.pushLibraryToBackend();
     } else if (existing.playlistOnly) {
       this.tracks.update((cur) =>
         cur.map((t) => (t.id === existing.id ? { ...t, playlistOnly: false } : t))
       );
       this.persistTracks();
+      this.pushLibraryToBackend();
     }
   }
 
@@ -724,6 +744,7 @@ export class LibraryService {
         return [...toAdd, ...updated];
       });
       this.persistTracks();
+      this.pushLibraryToBackend();
     }
   }
 
@@ -830,8 +851,18 @@ export class LibraryService {
     const artist = customArtist?.trim() || (isLive ? 'Live Radio' : 'Network Stream');
     const genre = customGenre?.trim() || (isLive ? 'Radio' : 'Web Stream');
 
+    const isYtOrSc =
+      cleanUrl.includes('youtube.com') ||
+      cleanUrl.includes('youtu.be') ||
+      cleanUrl.includes('soundcloud.com');
+
+    let finalAudioUrl = cleanUrl;
+    if (isYtOrSc) {
+      finalAudioUrl = `/api/stream?url=${encodeURIComponent(cleanUrl)}&title=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}`;
+    }
+
     let duration = 0;
-    if (!isLive) {
+    if (!isLive && !isYtOrSc) {
       duration = await new Promise<number>((resolve) => {
         const probeAudio = new Audio(cleanUrl);
         probeAudio.addEventListener('loadedmetadata', () => {
@@ -839,7 +870,7 @@ export class LibraryService {
           resolve(isFinite(d) && d > 0 ? Math.round(d) : 0);
         });
         probeAudio.addEventListener('error', () => resolve(0));
-        setTimeout(() => resolve(0), 2500);
+        setTimeout(() => resolve(0), 2000);
       });
     }
 
@@ -849,7 +880,7 @@ export class LibraryService {
       artist,
       album: isLive ? 'Live Radio Stations' : 'Web Streams',
       duration: duration || 0,
-      audioUrl: cleanUrl,
+      audioUrl: finalAudioUrl,
       genre,
       year: new Date().getFullYear(),
       format,
@@ -862,6 +893,7 @@ export class LibraryService {
 
     this.tracks.update((current) => [newTrack, ...current]);
     this.persistTracks();
+    this.pushLibraryToBackend();
     return newTrack;
   }
 

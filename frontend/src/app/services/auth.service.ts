@@ -122,7 +122,16 @@ export class AuthService {
     return clean.length >= 6 && clean.length <= 128;
   }
 
+  private activeBackendUrl = 'https://signal-audio-backend-production.up.railway.app';
+
+  setActiveBackendUrl(url: string) {
+    if (url) {
+      this.activeBackendUrl = url.trim().replace(/\/+$/, '');
+    }
+  }
+
   async verifyRemoteSession(backendUrl: string) {
+    this.setActiveBackendUrl(backendUrl);
     const t = this.token();
     if (!t) return;
 
@@ -144,13 +153,7 @@ export class AuthService {
   }
 
   private getEffectiveBackendUrl(backendUrl?: string): string {
-    if (typeof window !== 'undefined') {
-      const isRemoteHost = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
-      if (isRemoteHost) {
-        return window.location.origin;
-      }
-    }
-    let base = (backendUrl || '').trim().replace(/\/+$/, '');
+    let base = (backendUrl || this.activeBackendUrl || '').trim().replace(/\/+$/, '');
     const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
     if (isHttps && base.startsWith('http://')) {
       base = 'https://signal-audio-backend-production.up.railway.app';
