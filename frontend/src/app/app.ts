@@ -34,7 +34,7 @@ export class App implements OnInit {
   readonly authService = inject(AuthService);
 
   readonly isAuthModalOpen = signal<boolean>(false);
-  readonly authModalTab = signal<'login' | 'register'>('login');
+  readonly authModalTab = signal<'login' | 'register' | 'reset'>('login');
   readonly authUsernameInput = signal<string>('');
   readonly authEmailInput = signal<string>('');
   readonly authPasswordInput = signal<string>('');
@@ -232,7 +232,7 @@ export class App implements OnInit {
     }, 3000);
   }
 
-  openAuthModal(tab: 'login' | 'register' = 'login') {
+  openAuthModal(tab: 'login' | 'register' | 'reset' = 'login') {
     this.authModalTab.set(tab);
     this.authUsernameInput.set('');
     this.authEmailInput.set('');
@@ -287,11 +287,6 @@ export class App implements OnInit {
       return;
     }
 
-    if (this.authService.hasWhitespace(password)) {
-      this.authService.authError.set('Пароль не должен содержать пробелы');
-      return;
-    }
-
     if (!this.authService.isValidUsername(username)) {
       this.authService.authError.set('Имя пользователя должно быть от 3 до 30 символов (латиница, цифры, _ и -)');
       return;
@@ -303,21 +298,15 @@ export class App implements OnInit {
     }
 
     if (!this.authService.isValidPassword(password)) {
-      this.authService.authError.set('Пароль должен содержать от 6 до 128 символов без пробелов');
+      this.authService.authError.set('Пароль должен содержать от 6 до 128 символов');
       return;
     }
 
     const ok = await this.authService.sendVerificationCode(backendUrl, username, email, password);
     if (ok) {
       this.registerStep.set('verify');
-      const fallback = this.authService.fallbackCode();
-      if (fallback) {
-        this.authCodeInput.set(fallback);
-        this.showToast(`Код подтверждения: ${fallback}`);
-      } else {
-        this.authCodeInput.set('');
-        this.showToast(`Код отправлен на ${email}`);
-      }
+      this.authCodeInput.set('');
+      this.showToast(`Код отправлен на ${email}`);
       this.startResendTimer();
     }
   }
@@ -329,7 +318,7 @@ export class App implements OnInit {
     const backendUrl = this.libraryService.getBackendUrl();
 
     if (code.length !== 6 || !/^\d{6}$/.test(code)) {
-      this.authService.authError.set('Введите 6-значный цифровой код');
+      this.authService.authError.set('Введите 6-значный цифровой код из письма');
       return;
     }
 
@@ -338,7 +327,6 @@ export class App implements OnInit {
       this.clearResendTimer();
       this.authPasswordInput.set('');
       this.authCodeInput.set('');
-      this.authService.fallbackCode.set(null);
       this.isAuthModalOpen.set(false);
       this.showToast(`Регистрация подтверждена! Добро пожаловать, ${username}!`);
       await this.libraryService.onUserLoggedIn();
@@ -353,13 +341,8 @@ export class App implements OnInit {
     const ok = await this.authService.resendCode(backendUrl, email);
     if (ok) {
       this.startResendTimer();
-      const fallback = this.authService.fallbackCode();
-      if (fallback) {
-        this.authCodeInput.set(fallback);
-        this.showToast(`Новый код: ${fallback}`);
-      } else {
-        this.showToast(`Новый код отправлен на ${email}`);
-      }
+      this.authCodeInput.set('');
+      this.showToast(`Новый код отправлен на ${email}`);
     }
   }
 
@@ -367,7 +350,52 @@ export class App implements OnInit {
     this.clearResendTimer();
     this.registerStep.set('input');
     this.authService.authError.set(null);
-    this.authService.fallbackCode.set(null);
+  }
+
+  async startPasswordReset() {
+    const loginOrEmail = this.authEmailInput().trim() || this.authUsernameInput().trim();
+    const backendUrl = this.libraryService.getBackendUrl();
+
+    if (!loginOrEmail) {
+      this.authService.authError.set('Введите ваш логин или email для сброса пароля');
+      return;
+    }
+
+    const ok = await this.authService.requestPasswordReset(backendUrl, loginOrEmail);
+    if (ok) {
+      this.registerStep.set('verify');
+      this.authCodeInput.set('');
+      this.showToast('Код сброса отправлен на email');
+      this.startResendTimer();
+    }
+  }
+
+  async confirmPasswordReset() {
+    const loginOrEmail = this.authEmailInput().trim() || this.authUsernameInput().trim();
+    const code = this.authCodeInput().trim();
+    const newPassword = this.authPasswordInput().trim();
+    const backendUrl = this.libraryService.getBackendUrl();
+
+    if (code.length !== 6 || !/^\d{6}$/.test(code)) {
+      this.authService.authError.set('Введите 6-значный цифровой код');
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      this.authService.authError.set('Новый пароль должен быть не менее 6 символов');
+      return;
+    }
+
+    const ok = await this.authService.confirmPasswordReset(backendUrl, loginOrEmail, code, newPassword);
+    if (ok) {
+      this.clearResendTimer();
+      this.authPasswordInput.set('');
+      this.authCodeInput.set('');
+      this.authService.fallbackCode.set(null);
+      this.isAuthModalOpen.set(false);
+      this.showToast('Пароль успешно обновлен! Добро пожаловать!');
+      await this.libraryService.onUserLoggedIn();
+    }
   }
 
   async submitAuth() {
@@ -387,11 +415,6 @@ export class App implements OnInit {
         return;
       }
 
-      if (this.authService.hasWhitespace(pass)) {
-        this.authService.authError.set('Пароль не должен содержать пробелы');
-        return;
-      }
-
       const ok = await this.authService.login(backendUrl, loginVal, pass);
       if (ok) {
         this.authPasswordInput.set('');
@@ -400,11 +423,43 @@ export class App implements OnInit {
         this.showToast(`Добро пожаловать, ${this.authService.currentUser()?.username || loginVal}!`);
         await this.libraryService.onUserLoggedIn();
       }
-    } else {
+    } else if (this.authModalTab() === 'register') {
+      const username = this.authUsernameInput().trim();
+      const pass = this.authPasswordInput().trim();
+
+      if (!username || !pass) {
+        this.authService.authError.set('Заполните имя пользователя и пароль');
+        return;
+      }
+
+      if (this.authService.hasWhitespace(username)) {
+        this.authService.authError.set('Имя пользователя не должно содержать пробелы');
+        return;
+      }
+
+      if (!this.authService.isValidUsername(username)) {
+        this.authService.authError.set('Имя пользователя должно быть от 3 до 30 символов (только латиница, цифры, _ и -)');
+        return;
+      }
+
+      if (!this.authService.isValidPassword(pass)) {
+        this.authService.authError.set('Пароль должен содержать от 6 до 128 символов');
+        return;
+      }
+
+      const ok = await this.authService.register(backendUrl, username, pass);
+      if (ok) {
+        this.authPasswordInput.set('');
+        this.authCodeInput.set('');
+        this.isAuthModalOpen.set(false);
+        this.showToast(`Регистрация успешна! Добро пожаловать, ${username}!`);
+        await this.libraryService.onUserLoggedIn();
+      }
+    } else if (this.authModalTab() === 'reset') {
       if (this.registerStep() === 'input') {
-        await this.startRegistration();
+        await this.startPasswordReset();
       } else {
-        await this.confirmRegistrationCode();
+        await this.confirmPasswordReset();
       }
     }
   }

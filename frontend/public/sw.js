@@ -1,4 +1,4 @@
-const CACHE_NAME = 'signal-pwa-v6';
+const CACHE_NAME = 'signal-pwa-v8';
 const OFFLINE_AUDIO_CACHE = 'signal-offline-tracks-v1';
 
 const ASSETS_TO_CACHE = [

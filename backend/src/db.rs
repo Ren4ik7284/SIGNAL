@@ -5,7 +5,16 @@ use std::str::FromStr;
 pub type DbPool = Pool<Sqlite>;
 
 pub async fn init_db() -> Result<DbPool, sqlx::Error> {
-    let db_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| "sqlite://signal.db?mode=rwc".to_string());
+    let env_url = std::env::var("DATABASE_URL").unwrap_or_default();
+    let db_url = if env_url.starts_with("sqlite:") {
+        env_url
+    } else if std::path::Path::new("/data").exists() {
+        "sqlite:///data/signal.db?mode=rwc".to_string()
+    } else {
+        "sqlite://signal.db?mode=rwc".to_string()
+    };
+
+    println!("[SIGNAL DB] Использование базы данных: {}", db_url);
 
     let connection_options = SqliteConnectOptions::from_str(&db_url)?
         .create_if_missing(true);
@@ -39,6 +48,21 @@ pub async fn init_db() -> Result<DbPool, sqlx::Error> {
             code TEXT NOT NULL,
             username TEXT NOT NULL,
             password_hash TEXT NOT NULL,
+            expires_at INTEGER NOT NULL,
+            created_at INTEGER NOT NULL,
+            attempts INTEGER DEFAULT 0
+        );
+        "#,
+    )
+    .execute(&pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS password_resets (
+            email TEXT PRIMARY KEY,
+            code TEXT NOT NULL,
+            user_id TEXT NOT NULL,
             expires_at INTEGER NOT NULL,
             created_at INTEGER NOT NULL,
             attempts INTEGER DEFAULT 0

@@ -13,7 +13,10 @@ use tower_http::cors::CorsLayer;
 
 use config::ensure_cookies_on_start;
 use db::{init_db, DbPool};
-use handlers::auth::{get_me, login, resend_verification_code, send_verification_code, verify_registration_code};
+use handlers::auth::{
+    confirm_password_reset, get_me, login, register, request_password_reset, resend_verification_code,
+    send_verification_code, verify_registration_code,
+};
 use handlers::cover::{health_check, proxy_cover};
 use handlers::history::{clear_history, get_history, record_play};
 use handlers::library::{get_library, save_library};
@@ -44,10 +47,13 @@ async fn main() {
     let app = Router::new()
         .route("/", get(|| async { "SIGNAL // Audio Backend is running" }))
         .route("/api/health", get(health_check))
+        .route("/api/auth/register", post(register))
+        .route("/api/auth/login", post(login))
         .route("/api/auth/send-code", post(send_verification_code))
         .route("/api/auth/verify-code", post(verify_registration_code))
         .route("/api/auth/resend-code", post(resend_verification_code))
-        .route("/api/auth/login", post(login))
+        .route("/api/auth/reset-password-code", post(request_password_reset))
+        .route("/api/auth/reset-password", post(confirm_password_reset))
         .route("/api/auth/me", get(get_me))
         .route("/api/sync", get(get_library).post(save_library))
         .route("/api/history", get(get_history).post(record_play).delete(clear_history))

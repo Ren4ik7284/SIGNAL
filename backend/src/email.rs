@@ -22,7 +22,6 @@ pub async fn send_verification_email(to_email: &str, code: &str) -> Result<(), S
                 Ok(_) => return Ok(()),
                 Err(e) => {
                     eprintln!("[SIGNAL AUTH] Resend failed: {}", e);
-                    return Err(format!("Resend error: {}", e));
                 }
             }
         }

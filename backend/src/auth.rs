@@ -18,6 +18,13 @@ pub struct SendCodeRequest {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct RegisterRequest {
+    pub username: String,
+    pub password: String,
+    pub email: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct VerifyCodeRequest {
     pub email: String,
     pub code: String,
@@ -27,6 +34,18 @@ pub struct VerifyCodeRequest {
 pub struct LoginRequest {
     pub login: String,
     pub password: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ResetPasswordRequest {
+    pub email_or_login: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ConfirmResetPasswordRequest {
+    pub email_or_login: String,
+    pub code: String,
+    pub new_password: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -107,32 +126,30 @@ pub fn validate_username(username: &str) -> Result<(), &'static str> {
     if trimmed.is_empty() {
         return Err("Имя пользователя обязательно для заполнения");
     }
-    if username.contains(' ') || username.contains('\t') || username.contains('\n') {
+    if trimmed.contains(' ') || trimmed.contains('\t') || trimmed.contains('\n') {
         return Err("Имя пользователя не должно содержать пробелы");
     }
-    if username.len() < 3 {
+    if trimmed.len() < 3 {
         return Err("Имя пользователя должно содержать не менее 3 символов");
     }
-    if username.len() > 30 {
+    if trimmed.len() > 30 {
         return Err("Имя пользователя не должно превышать 30 символов");
     }
-    if !username.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+    if !trimmed.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
         return Err("Имя пользователя может содержать только латинские буквы, цифры, '_' и '-'");
     }
     Ok(())
 }
 
 pub fn validate_password(password: &str) -> Result<(), &'static str> {
-    if password.is_empty() {
+    let trimmed = password.trim();
+    if trimmed.is_empty() {
         return Err("Пароль обязателен для заполнения");
     }
-    if password.contains(' ') || password.contains('\t') || password.contains('\n') {
-        return Err("Пароль не должен содержать пробелы");
-    }
-    if password.len() < 6 {
+    if trimmed.len() < 6 {
         return Err("Пароль должен содержать не менее 6 символов");
     }
-    if password.len() > 128 {
+    if trimmed.len() > 128 {
         return Err("Пароль не должен превышать 128 символов");
     }
     Ok(())

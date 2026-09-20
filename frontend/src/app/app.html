@@ -1531,14 +1531,30 @@
       <div class="modal-dialog auth-dialog" (click)="$event.stopPropagation()">
         <div class="modal-header">
           <div>
-            <h3 class="modal-title">{{ authModalTab() === 'login' ? 'Вход в аккаунт' : (registerStep() === 'verify' ? 'Подтверждение почты' : 'Регистрация в SIGNAL') }}</h3>
+            <h3 class="modal-title">
+              @if (authModalTab() === 'login') {
+                Вход в аккаунт
+              } @else if (authModalTab() === 'register') {
+                {{ registerStep() === 'verify' ? 'Подтверждение почты' : 'Регистрация в SIGNAL' }}
+              } @else {
+                {{ registerStep() === 'verify' ? 'Новый пароль' : 'Восстановление доступа' }}
+              }
+            </h3>
             <p class="modal-subtitle">
               @if (authModalTab() === 'login') {
                 Вход по логину или email
-              } @else if (registerStep() === 'verify') {
-                Введите 6-значный код, отправленный на {{ authEmailInput() }}
+              } @else if (authModalTab() === 'register') {
+                @if (registerStep() === 'verify') {
+                  Введите 6-значный код для {{ authEmailInput() }}
+                } @else {
+                  Создание профиля в SIGNAL AUDIO
+                }
               } @else {
-                Создание профиля с подтверждением через email
+                @if (registerStep() === 'verify') {
+                  Введите код подтверждения и новый пароль
+                } @else {
+                  Сброс пароля по логину или email
+                }
               }
             </p>
           </div>
@@ -1555,7 +1571,7 @@
             type="button"
             class="modal-tab-btn" 
             [class.active]="authModalTab() === 'login'"
-            (click)="authModalTab.set('login'); registerStep.set('input'); authService.authError.set(null)"
+            (click)="authModalTab.set('login'); authService.authError.set(null)"
           >
             Вход
           </button>
@@ -1563,7 +1579,7 @@
             type="button"
             class="modal-tab-btn" 
             [class.active]="authModalTab() === 'register'"
-            (click)="authModalTab.set('register'); registerStep.set('input'); authService.authError.set(null)"
+            (click)="authModalTab.set('register'); authService.authError.set(null)"
           >
             Регистрация
           </button>
@@ -1577,6 +1593,13 @@
               </svg>
               <span>{{ err }}</span>
             </div>
+            @if (err.includes('уже существует') || err.includes('уже зарегистрирован')) {
+              <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                <button type="button" class="btn-text-sm" (click)="authModalTab.set('login'); authService.authError.set(null)">
+                  Перейти ко входу
+                </button>
+              </div>
+            }
           }
 
           @if (authModalTab() === 'login') {
@@ -1584,14 +1607,13 @@
               <label class="field-label">Логин или Email</label>
               <input 
                 type="text" 
-                placeholder="Имя пользователя или почта..." 
+                placeholder="Имя пользователя или email..." 
                 [ngModel]="authUsernameInput()"
                 (ngModelChange)="authUsernameInput.set($event)"
                 (keyup.enter)="submitAuth()"
                 class="form-text-input"
                 autofocus
               />
-              <span class="field-hint">Без пробелов</span>
             </div>
 
             <div class="input-field">
@@ -1625,12 +1647,12 @@
                 </button>
               </div>
             </div>
-          } @else if (registerStep() === 'input') {
+          } @else {
             <div class="input-field">
               <label class="field-label">Имя пользователя (Логин)</label>
               <input 
                 type="text" 
-                placeholder="Никнейм (от 3 символов, без пробелов)..." 
+                placeholder="Никнейм (от 3 символов)..." 
                 [ngModel]="authUsernameInput()"
                 (ngModelChange)="authUsernameInput.set($event)"
                 (keyup.enter)="submitAuth()"
@@ -1641,24 +1663,11 @@
             </div>
 
             <div class="input-field">
-              <label class="field-label">Электронная почта (Email)</label>
-              <input 
-                type="email" 
-                placeholder="example@mail.com..." 
-                [ngModel]="authEmailInput()"
-                (ngModelChange)="authEmailInput.set($event)"
-                (keyup.enter)="submitAuth()"
-                class="form-text-input"
-              />
-              <span class="field-hint">На эту почту будет выслан цифровой код</span>
-            </div>
-
-            <div class="input-field">
               <label class="field-label">Пароль</label>
               <div class="password-input-wrap">
                 <input 
                   [type]="showPassword() ? 'text' : 'password'" 
-                  placeholder="Минимум 6 символов без пробелов..." 
+                  placeholder="Минимум 6 символов..." 
                   [ngModel]="authPasswordInput()"
                   (ngModelChange)="authPasswordInput.set($event)"
                   (keyup.enter)="submitAuth()"
@@ -1683,59 +1692,7 @@
                   }
                 </button>
               </div>
-            </div>
-          } @else {
-            <div class="verify-step-card">
-              <div class="verify-icon-wrap">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2">
-                  <path d="M22 17a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9.5C2 7 4 5 6.5 5H18c2.2 0 4 1.8 4 4v8Z"/>
-                  <polyline points="2 8 12 14 22 8"/>
-                </svg>
-              </div>
-              <div class="verify-info">
-                <div class="verify-sent-title">Письмо с кодом отправлено</div>
-                <div class="verify-email-label font-mono">{{ authEmailInput() }}</div>
-              </div>
-            </div>
-
-            @if (authService.fallbackCode(); as code) {
-              <div style="background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 8px; padding: 12px; margin-bottom: 12px; text-align: center;">
-                <div style="font-size: 11px; color: #a1a1aa; margin-bottom: 4px;">Код для быстрой активации:</div>
-                <div style="font-size: 24px; font-weight: 800; letter-spacing: 4px; color: #38bdf8; font-family: monospace;">{{ code }}</div>
-              </div>
-            }
-
-            <div class="input-field">
-              <label class="field-label">Код подтверждения (6 цифр)</label>
-              <input 
-                type="text" 
-                maxlength="6"
-                placeholder="••••••" 
-                [ngModel]="authCodeInput()"
-                (ngModelChange)="authCodeInput.set($event)"
-                (keyup.enter)="submitAuth()"
-                class="form-text-input verify-code-input font-mono"
-                autofocus
-              />
-              <span class="field-hint">Введите одноразовый цифровой код из письма</span>
-            </div>
-
-            <div class="verify-resend-row">
-              <button 
-                type="button" 
-                class="btn-text-sm"
-                [disabled]="resendCountdown() > 0 || authService.isAuthLoading()"
-                (click)="resendVerificationCode()"
-              >
-                @if (resendCountdown() > 0) {
-                  <span>Отправить повторно через {{ resendCountdown() }}с</span>
-                } @else {
-                  <span>Отправить код повторно</span>
-                }
-              </button>
-              <button type="button" class="btn-text-sm" (click)="backToRegisterInputs()">
-                Изменить email
-              </button>
+              <span class="field-hint">Пароль для безопасного входа в аккаунт</span>
             </div>
           }
         </div>
@@ -1756,30 +1713,17 @@
                 <span>Войти</span>
               }
             </button>
-          } @else if (registerStep() === 'input') {
-            <button 
-              type="button" 
-              class="btn-confirm-action" 
-              [disabled]="!authUsernameInput().trim() || !authEmailInput().trim() || !authPasswordInput().trim() || authService.isAuthLoading()"
-              (click)="submitAuth()"
-            >
-              @if (authService.isAuthLoading()) {
-                <span>Отправка кода...</span>
-              } @else {
-                <span>Получить код</span>
-              }
-            </button>
           } @else {
             <button 
               type="button" 
               class="btn-confirm-action" 
-              [disabled]="authCodeInput().trim().length !== 6 || authService.isAuthLoading()"
+              [disabled]="!authUsernameInput().trim() || !authPasswordInput().trim() || authService.isAuthLoading()"
               (click)="submitAuth()"
             >
               @if (authService.isAuthLoading()) {
-                <span>Проверка...</span>
+                <span>Регистрация...</span>
               } @else {
-                <span>Подтвердить и войти</span>
+                <span>Зарегистрироваться</span>
               }
             </button>
           }

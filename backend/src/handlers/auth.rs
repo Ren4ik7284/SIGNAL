@@ -8,8 +8,8 @@ use uuid::Uuid;
 
 use crate::auth::{
     create_jwt, extract_claims_from_headers, hash_password, validate_email, validate_password,
-    validate_username, verify_password, AuthResponse, LoginRequest, SendCodeRequest, UserInfo,
-    VerifyCodeRequest,
+    validate_username, verify_password, AuthResponse, ConfirmResetPasswordRequest, LoginRequest,
+    RegisterRequest, ResetPasswordRequest, SendCodeRequest, UserInfo, VerifyCodeRequest,
 };
 use crate::email::send_verification_email;
 use crate::AppState;
@@ -113,25 +113,22 @@ pub async fn send_verification_code(
         )
     })?;
 
-    let email_sent = send_verification_email(&clean_email, &code).await.is_ok();
+    send_verification_email(&clean_email, &code).await.map_err(|err_msg| {
+        eprintln!("[SIGNAL AUTH] Ошибка отправки письма на {}: {}", clean_email, err_msg);
+        (
+            StatusCode::BAD_GATEWAY,
+            Json(json!({ 
+                "error": "Не удалось отправить письмо с кодом. Убедитесь в правильности email или настройте отправку писем на сервере." 
+            })),
+        )
+    })?;
 
-    if email_sent {
-        Ok(Json(json!({
-            "success": true,
-            "email": clean_email,
-            "message": "Код подтверждения отправлен на вашу почту",
-            "expires_in": 900
-        })))
-    } else {
-        println!("[SIGNAL AUTH] Fallback code generated for: {}", clean_email);
-        Ok(Json(json!({
-            "success": true,
-            "email": clean_email,
-            "message": "Код подтверждения сформирован",
-            "fallback_code": code,
-            "expires_in": 900
-        })))
-    }
+    Ok(Json(json!({
+        "success": true,
+        "email": clean_email,
+        "message": "Код подтверждения отправлен на вашу почту",
+        "expires_in": 900
+    })))
 }
 
 pub async fn resend_verification_code(
@@ -190,23 +187,19 @@ pub async fn resend_verification_code(
             )
         })?;
 
-    let email_sent = send_verification_email(&clean_email, &code).await.is_ok();
+    send_verification_email(&clean_email, &code).await.map_err(|err_msg| {
+        eprintln!("[SIGNAL AUTH] Ошибка повторной отправки письма на {}: {}", clean_email, err_msg);
+        (
+            StatusCode::BAD_GATEWAY,
+            Json(json!({ "error": "Не удалось отправить письмо с кодом. Попробуйте позже." })),
+        )
+    })?;
 
-    if email_sent {
-        Ok(Json(json!({
-            "success": true,
-            "message": "Новый код подтверждения отправлен на email",
-            "expires_in": 900
-        })))
-    } else {
-        println!("[SIGNAL AUTH] Fallback code generated for: {}", clean_email);
-        Ok(Json(json!({
-            "success": true,
-            "message": "Новый код сформирован",
-            "fallback_code": code,
-            "expires_in": 900
-        })))
-    }
+    Ok(Json(json!({
+        "success": true,
+        "message": "Новый код подтверждения отправлен на email",
+        "expires_in": 900
+    })))
 }
 
 pub async fn verify_registration_code(
@@ -337,6 +330,110 @@ pub async fn verify_registration_code(
     }))
 }
 
+pub async fn register(
+    State(state): State<AppState>,
+    Json(payload): Json<RegisterRequest>,
+) -> Result<Json<AuthResponse>, (StatusCode, Json<Value>)> {
+    if let Err(err) = validate_username(&payload.username) {
+        return Err((StatusCode::BAD_REQUEST, Json(json!({ "error": err }))));
+    }
+    let clean_username = payload.username.trim().to_string();
+
+    if let Err(err) = validate_password(&payload.password) {
+        return Err((StatusCode::BAD_REQUEST, Json(json!({ "error": err }))));
+    }
+
+    let clean_email = match &payload.email {
+        Some(e) if !e.trim().is_empty() => match validate_email(e) {
+            Ok(valid) => Some(valid),
+            Err(err) => return Err((StatusCode::BAD_REQUEST, Json(json!({ "error": err })))),
+        },
+        _ => None,
+    };
+
+    let exists = sqlx::query("SELECT id FROM users WHERE LOWER(username) = LOWER(?)")
+        .bind(&clean_username)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Ошибка базы данных" })),
+            )
+        })?;
+
+    if exists.is_some() {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(json!({ "error": "Пользователь с таким логином уже существует" })),
+        ));
+    }
+
+    if let Some(ref email) = clean_email {
+        let email_exists = sqlx::query("SELECT id FROM users WHERE LOWER(email) = LOWER(?)")
+            .bind(email)
+            .fetch_optional(&state.pool)
+            .await
+            .map_err(|_| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "error": "Ошибка базы данных" })),
+                )
+            })?;
+
+        if email_exists.is_some() {
+            return Err((
+                StatusCode::CONFLICT,
+                Json(json!({ "error": "Пользователь с такой почтой уже существует" })),
+            ));
+        }
+    }
+
+    let password_hash = hash_password(payload.password.trim()).map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": "Не удалось захэшировать пароль" })),
+        )
+    })?;
+
+    let user_id = Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().timestamp();
+
+    sqlx::query(
+        "INSERT INTO users (id, username, email, password_hash, created_at) VALUES (?, ?, ?, ?, ?)",
+    )
+    .bind(&user_id)
+    .bind(&clean_username)
+    .bind(&clean_email)
+    .bind(&password_hash)
+    .bind(now)
+    .execute(&state.pool)
+    .await
+    .map_err(|err| {
+        eprintln!("[SIGNAL AUTH] Ошибка регистрации пользователя: {}", err);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": "Не удалось зарегистрировать пользователя" })),
+        )
+    })?;
+
+    let token = create_jwt(&user_id, &clean_username, clean_email.as_deref()).map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": "Не удалось сгенерировать токен авторизации" })),
+        )
+    })?;
+
+    Ok(Json(AuthResponse {
+        token,
+        user: UserInfo {
+            id: user_id,
+            username: clean_username,
+            email: clean_email,
+        },
+    }))
+}
+
 pub async fn login(
     State(state): State<AppState>,
     Json(payload): Json<LoginRequest>,
@@ -344,17 +441,17 @@ pub async fn login(
     let login = payload.login.trim();
     let password = payload.password.trim();
 
-    if login.is_empty() || login.contains(' ') || login.contains('\t') || login.contains('\n') {
+    if login.is_empty() {
         return Err((
             StatusCode::BAD_REQUEST,
-            Json(json!({ "error": "Логин или email не должен содержать пробелов" })),
+            Json(json!({ "error": "Введите логин или email" })),
         ));
     }
 
-    if password.is_empty() || password.contains(' ') || password.contains('\t') || password.contains('\n') {
+    if password.is_empty() {
         return Err((
             StatusCode::BAD_REQUEST,
-            Json(json!({ "error": "Пароль не должен содержать пробелов" })),
+            Json(json!({ "error": "Введите пароль" })),
         ));
     }
 
@@ -405,6 +502,213 @@ pub async fn login(
             id: user_id,
             username: db_username,
             email: db_email,
+        },
+    }))
+}
+
+pub async fn request_password_reset(
+    State(state): State<AppState>,
+    Json(payload): Json<ResetPasswordRequest>,
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    let clean_input = payload.email_or_login.trim().to_lowercase();
+    if clean_input.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "error": "Введите логин или email" })),
+        ));
+    }
+
+    let user_row = sqlx::query("SELECT id, username, email FROM users WHERE LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?)")
+        .bind(&clean_input)
+        .bind(&clean_input)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Ошибка базы данных" })),
+            )
+        })?;
+
+    let row = match user_row {
+        Some(r) => r,
+        None => {
+            return Err((
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "Пользователь с таким логином или email не найден" })),
+            ));
+        }
+    };
+
+    let user_id: String = row.get("id");
+    let email: Option<String> = row.get("email");
+    let target_email = match email {
+        Some(e) if !e.trim().is_empty() => e,
+        _ => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(json!({ "error": "К этому аккаунту не привязан email для сброса пароля" })),
+            ));
+        }
+    };
+
+    let code = format!("{:06}", fastrand::u32(100000..=999999));
+    let now = chrono::Utc::now().timestamp();
+    let expires_at = now + 900;
+
+    sqlx::query(
+        r#"
+        INSERT INTO password_resets (email, code, user_id, expires_at, created_at, attempts)
+        VALUES (?, ?, ?, ?, ?, 0)
+        ON CONFLICT(email) DO UPDATE SET
+            code = excluded.code,
+            user_id = excluded.user_id,
+            expires_at = excluded.expires_at,
+            created_at = excluded.created_at,
+            attempts = 0
+        "#,
+    )
+    .bind(&target_email)
+    .bind(&code)
+    .bind(&user_id)
+    .bind(expires_at)
+    .bind(now)
+    .execute(&state.pool)
+    .await
+    .map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": "Не удалось создать код сброса" })),
+        )
+    })?;
+
+    send_verification_email(&target_email, &code).await.map_err(|err_msg| {
+        eprintln!("[SIGNAL AUTH] Ошибка отправки кода сброса на {}: {}", target_email, err_msg);
+        (
+            StatusCode::BAD_GATEWAY,
+            Json(json!({ "error": "Не удалось отправить письмо с кодом сброса. Попробуйте позже." })),
+        )
+    })?;
+
+    Ok(Json(json!({
+        "success": true,
+        "email": target_email,
+        "message": "Код для сброса пароля отправлен на вашу почту",
+        "expires_in": 900
+    })))
+}
+
+pub async fn confirm_password_reset(
+    State(state): State<AppState>,
+    Json(payload): Json<ConfirmResetPasswordRequest>,
+) -> Result<Json<AuthResponse>, (StatusCode, Json<Value>)> {
+    let clean_input = payload.email_or_login.trim().to_lowercase();
+    let code = payload.code.trim();
+    let new_password = payload.new_password.trim();
+
+    if let Err(err) = validate_password(new_password) {
+        return Err((StatusCode::BAD_REQUEST, Json(json!({ "error": err }))));
+    }
+
+    let reset_record = sqlx::query(
+        r#"
+        SELECT pr.email, pr.code, pr.user_id, pr.expires_at, pr.attempts, u.username, u.email as u_email
+        FROM password_resets pr
+        JOIN users u ON u.id = pr.user_id
+        WHERE LOWER(pr.email) = LOWER(?) OR LOWER(u.username) = LOWER(?)
+        "#
+    )
+    .bind(&clean_input)
+    .bind(&clean_input)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": "Ошибка базы данных" })),
+        )
+    })?;
+
+    let row = match reset_record {
+        Some(r) => r,
+        None => {
+            return Err((
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "Код сброса пароля не найден или устарел. Запросите сброс заново." })),
+            ));
+        }
+    };
+
+    let db_email: String = row.get("email");
+    let db_code: String = row.get("code");
+    let user_id: String = row.get("user_id");
+    let username: String = row.get("username");
+    let u_email: Option<String> = row.get("u_email");
+    let expires_at: i64 = row.get("expires_at");
+    let attempts: i64 = row.get("attempts");
+
+    let now = chrono::Utc::now().timestamp();
+    if now > expires_at {
+        let _ = sqlx::query("DELETE FROM password_resets WHERE email = ?").bind(&db_email).execute(&state.pool).await;
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "error": "Срок действия кода истек. Запросите новый код." })),
+        ));
+    }
+
+    if attempts >= 5 {
+        let _ = sqlx::query("DELETE FROM password_resets WHERE email = ?").bind(&db_email).execute(&state.pool).await;
+        return Err((
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(json!({ "error": "Превышено число попыток ввода. Запросите сброс заново." })),
+        ));
+    }
+
+    if db_code != code {
+        let _ = sqlx::query("UPDATE password_resets SET attempts = attempts + 1 WHERE email = ?").bind(&db_email).execute(&state.pool).await;
+        let left = 4 - attempts;
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "error": format!("Неверный код подтверждения. Осталось попыток: {}", if left > 0 { left } else { 0 })
+            })),
+        ));
+    }
+
+    let password_hash = hash_password(new_password).map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": "Не удалось обновить пароль" })),
+        )
+    })?;
+
+    sqlx::query("UPDATE users SET password_hash = ? WHERE id = ?")
+        .bind(&password_hash)
+        .bind(&user_id)
+        .execute(&state.pool)
+        .await
+        .map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Не удалось сохранить новый пароль" })),
+            )
+        })?;
+
+    let _ = sqlx::query("DELETE FROM password_resets WHERE email = ?").bind(&db_email).execute(&state.pool).await;
+
+    let token = create_jwt(&user_id, &username, u_email.as_deref()).map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": "Не удалось сгенерировать токен авторизации" })),
+        )
+    })?;
+
+    Ok(Json(AuthResponse {
+        token,
+        user: UserInfo {
+            id: user_id,
+            username,
+            email: u_email,
         },
     }))
 }
