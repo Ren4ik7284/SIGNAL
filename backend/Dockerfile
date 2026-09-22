@@ -21,6 +21,5 @@ WORKDIR /app
 
 COPY --from=builder /app/target/release/signal-audio-backend /app/
 COPY --from=builder /app/cookies.txt* /app/
-COPY --from=builder /app/backend/cookies.txt* /app/
 
 CMD ["./signal-audio-backend"]
