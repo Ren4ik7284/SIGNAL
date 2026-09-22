@@ -101,19 +101,37 @@ export class OfflineService {
     currentDownloading.add(track.id);
     this.downloadingTrackIds.set(currentDownloading);
 
-    try {
       let audioUrl = track.audioUrl;
+      const backendBase = this.getBackendBaseUrl();
 
-      // Resolve relative /api/stream URLs to the active backend URL (not window.location.origin)
-      if (!audioUrl.startsWith('blob:') && !audioUrl.startsWith('http')) {
-        const backendBase = this.getBackendBaseUrl();
-        audioUrl = `${backendBase}${audioUrl.startsWith('/') ? '' : '/'}${audioUrl}`;
-      }
+      // Resolve relative and absolute URLs to the active backend URL
+      if (!audioUrl.startsWith('blob:')) {
+        if (audioUrl.startsWith('/api/stream')) {
+          audioUrl = `${backendBase}${audioUrl}`;
+        } else if (audioUrl.includes('/api/stream')) {
+          const streamIdx = audioUrl.indexOf('/api/stream');
+          audioUrl = `${backendBase}${audioUrl.slice(streamIdx)}`;
+        } else if (
+          audioUrl.includes('youtube.com') ||
+          audioUrl.includes('youtu.be') ||
+          audioUrl.includes('soundcloud.com')
+        ) {
+          audioUrl = `${backendBase}/api/stream?url=${encodeURIComponent(audioUrl)}`;
+        } else if (!audioUrl.startsWith('http')) {
+          audioUrl = `${backendBase}${audioUrl.startsWith('/') ? '' : '/'}${audioUrl}`;
+        }
 
-      // Add title/artist metadata to stream URL for better backend resolution
-      if (audioUrl.includes('/api/stream') && !audioUrl.includes('title=') && track.title) {
-        const glue = audioUrl.includes('?') ? '&' : '?';
-        audioUrl = `${audioUrl}${glue}title=${encodeURIComponent(track.title || '')}&artist=${encodeURIComponent(track.artist || '')}`;
+        // Add title/artist metadata to stream URL for better backend resolution
+        if (audioUrl.includes('/api/stream')) {
+          if (!audioUrl.includes('title=') && track.title) {
+            const glue = audioUrl.includes('?') ? '&' : '?';
+            audioUrl = `${audioUrl}${glue}title=${encodeURIComponent(track.title || '')}`;
+          }
+          if (!audioUrl.includes('artist=') && track.artist) {
+            const glue = audioUrl.includes('?') ? '&' : '?';
+            audioUrl = `${audioUrl}${glue}artist=${encodeURIComponent(track.artist || '')}`;
+          }
+        }
       }
 
       const resp = await fetch(audioUrl, { mode: 'cors' });

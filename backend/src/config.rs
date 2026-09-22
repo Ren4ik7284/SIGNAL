@@ -18,11 +18,42 @@ pub fn get_yt_dlp_cmd() -> String {
     }
 }
 
+pub fn init_cookies_from_env() {
+    if let Ok(content) = std::env::var("YT_COOKIES") {
+        let trimmed = content.trim();
+        if !trimmed.is_empty() {
+            let target = if Path::new("/data").exists() {
+                "/data/cookies.txt"
+            } else if Path::new("/app").exists() {
+                "/app/cookies.txt"
+            } else if Path::new("backend").exists() {
+                "backend/cookies.txt"
+            } else {
+                "cookies.txt"
+            };
+            if let Err(e) = std::fs::write(target, trimmed.as_bytes()) {
+                eprintln!("[SIGNAL] Failed to write YT_COOKIES to {}: {}", target, e);
+            } else {
+                println!("[SIGNAL] Successfully saved cookies from YT_COOKIES env var to {}", target);
+            }
+        }
+    }
+}
+
 pub fn get_cookies_path() -> Option<String> {
     if let Ok(env_path) = std::env::var("YT_COOKIES_PATH") {
         if Path::new(&env_path).exists() {
             return Some(env_path);
         }
+    }
+    if Path::new("/data/cookies.txt").exists() {
+        return Some("/data/cookies.txt".to_string());
+    }
+    if Path::new("/app/cookies.txt").exists() {
+        return Some("/app/cookies.txt".to_string());
+    }
+    if Path::new("/tmp/cookies.txt").exists() {
+        return Some("/tmp/cookies.txt".to_string());
     }
     if Path::new("cookies.txt").exists() {
         return Some("cookies.txt".to_string());

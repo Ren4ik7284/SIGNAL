@@ -676,11 +676,14 @@ export class App implements OnInit {
     this.libraryService.addTrackToLibrary(track);
     this.audioService.playTrack(track, this.libraryService.tracks());
     this.showToast(`Воспроизведение: ${track.title}`);
+    this.offlineService.saveTrackOffline(track);
   }
 
   addOnlineTrackToLib(track: Track) {
     this.libraryService.addTrackToLibrary(track);
-    this.showToast(`Трек "${track.title}" сохранен в медиатеку`);
+    this.audioService.playTrack(track, this.libraryService.tracks());
+    this.showToast(`Трек "${track.title}" добавлен и воспроизводится`);
+    this.offlineService.saveTrackOffline(track);
   }
 
   async extractYouTubeUrl() {
@@ -711,18 +714,17 @@ export class App implements OnInit {
     }
   }
 
-  addExtractedSingleTrack(playNow = false) {
+  addExtractedSingleTrack(playNow = true) {
     const data = this.extractedResult();
     const track = data?.mainVideo || data?.tracks[0];
     if (!track) return;
 
     this.libraryService.addTrackToLibrary(track);
-    if (playNow) {
-      this.audioService.playTrack(track, this.libraryService.tracks());
-      this.showToast(`Воспроизведение: ${track.title}`);
-    } else {
-      this.showToast(`Трек/микс "${track.title}" сохранен в медиатеку`);
-    }
+    this.audioService.playTrack(track, this.libraryService.tracks());
+    this.showToast(`Воспроизведение: ${track.title}`);
+
+    // Сохраняем в оффлайн кэш
+    this.offlineService.saveTrackOffline(track);
 
     this.isAddModalOpen.set(false);
     this.youtubeUrlInput.set('');
@@ -936,6 +938,7 @@ export class App implements OnInit {
       this.inputArtist.set('');
 
       this.audioService.playTrack(track, this.libraryService.tracks());
+      this.offlineService.saveTrackOffline(track);
     } catch {
       this.showToast('Ошибка при добавлении трека');
     } finally {
@@ -972,6 +975,7 @@ export class App implements OnInit {
 
     this.libraryService.addTrackToLibrary(track);
     this.audioService.playTrack(track, this.libraryService.tracks());
+    this.offlineService.saveTrackOffline(track);
     this.showToast(`Трек "${track.title}" добавлен в медиатеку`);
     this.isAddModalOpen.set(false);
     this.modalSearchInput.set('');

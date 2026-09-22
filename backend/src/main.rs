@@ -15,7 +15,7 @@ use std::time::Instant;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::limit::RequestBodyLimitLayer;
 
-use config::ensure_cookies_on_start;
+use config::{ensure_cookies_on_start, init_cookies_from_env};
 use db::{init_db, DbPool};
 use handlers::auth::{
     confirm_password_reset, get_me, login, register, request_password_reset, resend_verification_code,
@@ -44,6 +44,9 @@ async fn main() {
     if std::env::var("JWT_SECRET").is_err() {
         eprintln!("[SIGNAL WARN] JWT_SECRET не задан! Используется дефолтный ключ — НЕБЕЗОПАСНО для продакшена. Задайте переменную окружения JWT_SECRET.");
     }
+
+    // Initialize cookies from env variable immediately
+    init_cookies_from_env();
 
     // Refresh cookies in background — don't block server startup
     tokio::spawn(ensure_cookies_on_start());
