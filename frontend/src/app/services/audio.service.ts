@@ -61,7 +61,10 @@ export class AudioService {
       this.audio.setAttribute('playsinline', 'true');
       this.audio.setAttribute('webkit-playsinline', 'true');
       this.audio.setAttribute('x-webkit-airplay', 'allow');
-      this.audio.crossOrigin = 'anonymous';
+      const isMobile = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      if (!isMobile) {
+        this.audio.crossOrigin = 'anonymous';
+      }
       this.audio.preload = 'auto';
       this.audio.style.position = 'fixed';
       this.audio.style.width = '1px';
@@ -493,6 +496,13 @@ export class AudioService {
       }
     }
 
+    const isMobile = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if (playUrl.startsWith('blob:') || isMobile) {
+      this.audio.removeAttribute('crossorigin');
+    } else {
+      this.audio.crossOrigin = 'anonymous';
+    }
+
     this.audio.src = playUrl;
 
     // Apply smooth fade in
@@ -578,6 +588,13 @@ export class AudioService {
 
     this.streamSeekOffset.set(clamped);
     this.currentTime.set(clamped);
+
+    const isMobile = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if (newUrl.startsWith('blob:') || isMobile) {
+      this.audio.removeAttribute('crossorigin');
+    } else {
+      this.audio.crossOrigin = 'anonymous';
+    }
 
     this.audio.src = newUrl;
     this.audio

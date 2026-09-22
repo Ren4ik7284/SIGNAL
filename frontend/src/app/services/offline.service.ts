@@ -2,6 +2,66 @@ import { Injectable, signal, inject, Injector } from '@angular/core';
 import { Track } from '../models/track.model';
 import { LibraryService } from './library.service';
 
+const IDB_NAME = 'signal_offline_db';
+const IDB_STORE = 'audio_blobs';
+
+function openOfflineDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    if (typeof window === 'undefined' || !('indexedDB' in window)) {
+      reject(new Error('IndexedDB not supported'));
+      return;
+    }
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(IDB_STORE)) {
+        db.createObjectStore(IDB_STORE);
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbPutBlob(id: string, blob: Blob): Promise<void> {
+  const db = await openOfflineDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    const store = tx.objectStore(IDB_STORE);
+    const req = store.put(blob, id);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbGetBlob(id: string): Promise<Blob | null> {
+  try {
+    const db = await openOfflineDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, 'readonly');
+      const store = tx.objectStore(IDB_STORE);
+      const req = store.get(id);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function idbDeleteBlob(id: string): Promise<void> {
+  try {
+    const db = await openOfflineDb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      const store = tx.objectStore(IDB_STORE);
+      const req = store.delete(id);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  } catch {}
+}
+
 @Injectable({
   providedIn: 'root',
 })
@@ -12,6 +72,8 @@ export class OfflineService {
   private injector = inject(Injector);
   readonly offlineTrackIds = signal<Set<string>>(new Set());
   readonly downloadingTrackIds = signal<Set<string>>(new Set());
+
+  private activeBlobUrl: string | null = null;
 
   constructor() {
     this.loadOfflineIndex();
@@ -60,19 +122,29 @@ export class OfflineService {
    * Сохраняет готовый Blob (например, загруженный локальный файл) в постоянный кэш офлайн.
    */
   async saveBlobOffline(track: Track, blob: Blob): Promise<boolean> {
-    if (typeof window === 'undefined' || !('caches' in window)) return false;
     try {
-      const cache = await caches.open(this.CACHE_NAME);
-      const cacheKey = `/offline-audio/${track.id}`;
-      const responseToCache = new Response(blob, {
-        status: 200,
-        headers: {
-          'Content-Type': blob.type || 'audio/mpeg',
-          'Content-Length': blob.size.toString(),
-          'Accept-Ranges': 'bytes',
-        },
-      });
-      await cache.put(cacheKey, responseToCache);
+      // 1. Сохраняем в IndexedDB (надежно на мобильных)
+      try {
+        await idbPutBlob(track.id, blob);
+      } catch (e) {
+        console.warn('[OfflineService] IndexedDB save failed, fallback to Cache API:', e);
+      }
+
+      // 2. Также сохраняем в Cache API
+      if (typeof window !== 'undefined' && 'caches' in window) {
+        try {
+          const cache = await caches.open(this.CACHE_NAME);
+          const cacheKey = `/offline-audio/${track.id}`;
+          const responseToCache = new Response(blob, {
+            status: 200,
+            headers: {
+              'Content-Type': blob.type || 'audio/mpeg',
+              'Content-Length': blob.size.toString(),
+            },
+          });
+          await cache.put(cacheKey, responseToCache);
+        } catch {}
+      }
 
       const existing = this.getOfflineTracks().filter((t) => t.id !== track.id);
       const updatedTrack: Track = { ...track, isOffline: true };
@@ -90,7 +162,7 @@ export class OfflineService {
   }
 
   async saveTrackOffline(track: Track): Promise<boolean> {
-    if (typeof window === 'undefined' || !('caches' in window)) {
+    if (typeof window === 'undefined') {
       return false;
     }
     if (track.isLiveStream) {
@@ -101,6 +173,7 @@ export class OfflineService {
     currentDownloading.add(track.id);
     this.downloadingTrackIds.set(currentDownloading);
 
+    try {
       let audioUrl = track.audioUrl;
       const backendBase = this.getBackendBaseUrl();
 
@@ -140,21 +213,31 @@ export class OfflineService {
       }
 
       const blob = await resp.blob();
-      const cache = await caches.open(this.CACHE_NAME);
-      const cacheKey = `/offline-audio/${track.id}`;
 
-      // Save audio response in Cache API
-      const responseToCache = new Response(blob, {
-        status: 200,
-        headers: {
-          'Content-Type': 'audio/mpeg',
-          'Content-Length': blob.size.toString(),
-          'Accept-Ranges': 'bytes',
-        },
-      });
-      await cache.put(cacheKey, responseToCache);
+      // 1. Сохраняем в IndexedDB (гарантирует воспроизведение на iOS Safari и Android)
+      try {
+        await idbPutBlob(track.id, blob);
+      } catch (e) {
+        console.warn('[OfflineService] IndexedDB save error:', e);
+      }
 
-      // Save metadata to local storage
+      // 2. Сохраняем в Cache API
+      if ('caches' in window) {
+        try {
+          const cache = await caches.open(this.CACHE_NAME);
+          const cacheKey = `/offline-audio/${track.id}`;
+          const responseToCache = new Response(blob, {
+            status: 200,
+            headers: {
+              'Content-Type': 'audio/mpeg',
+              'Content-Length': blob.size.toString(),
+            },
+          });
+          await cache.put(cacheKey, responseToCache);
+        } catch {}
+      }
+
+      // 3. Сохраняем метаданные в local storage
       const existing = this.getOfflineTracks().filter((t) => t.id !== track.id);
       const updatedTrack: Track = { ...track, isOffline: true };
       existing.push(updatedTrack);
@@ -176,14 +259,16 @@ export class OfflineService {
   }
 
   async removeTrackOffline(trackId: string): Promise<boolean> {
-    if (typeof window === 'undefined' || !('caches' in window)) {
-      return false;
-    }
-
     try {
-      const cache = await caches.open(this.CACHE_NAME);
-      const cacheKey = `/offline-audio/${trackId}`;
-      await cache.delete(cacheKey);
+      await idbDeleteBlob(trackId);
+
+      if (typeof window !== 'undefined' && 'caches' in window) {
+        try {
+          const cache = await caches.open(this.CACHE_NAME);
+          const cacheKey = `/offline-audio/${trackId}`;
+          await cache.delete(cacheKey);
+        } catch {}
+      }
 
       const existing = this.getOfflineTracks().filter((t) => t.id !== trackId);
       localStorage.setItem(this.STORAGE_KEY_OFFLINE, JSON.stringify(existing));
@@ -199,19 +284,40 @@ export class OfflineService {
   }
 
   async getOfflineBlobUrl(trackId: string): Promise<string | null> {
-    if (typeof window === 'undefined' || !('caches' in window)) {
+    if (typeof window === 'undefined') {
       return null;
     }
 
     try {
-      const cache = await caches.open(this.CACHE_NAME);
-      const cacheKey = `/offline-audio/${trackId}`;
-      const match = await cache.match(cacheKey);
-      if (match) {
-        const blob = await match.blob();
-        return URL.createObjectURL(blob);
+      // 1. Сначала проверяем IndexedDB
+      const blob = await idbGetBlob(trackId);
+      if (blob) {
+        if (this.activeBlobUrl) {
+          URL.revokeObjectURL(this.activeBlobUrl);
+        }
+        this.activeBlobUrl = URL.createObjectURL(blob);
+        return this.activeBlobUrl;
       }
-    } catch {}
+
+      // 2. Фолбэк на Cache API
+      if ('caches' in window) {
+        const cache = await caches.open(this.CACHE_NAME);
+        const cacheKey = `/offline-audio/${trackId}`;
+        const match = await cache.match(cacheKey);
+        if (match) {
+          const b = await match.blob();
+          // Мигрируем в IndexedDB для будущей скорости
+          idbPutBlob(trackId, b).catch(() => {});
+          if (this.activeBlobUrl) {
+            URL.revokeObjectURL(this.activeBlobUrl);
+          }
+          this.activeBlobUrl = URL.createObjectURL(b);
+          return this.activeBlobUrl;
+        }
+      }
+    } catch (e) {
+      console.warn('[OfflineService] getOfflineBlobUrl error:', e);
+    }
 
     return null;
   }
