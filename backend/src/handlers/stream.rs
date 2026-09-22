@@ -211,26 +211,46 @@ pub async fn stream_audio(
     } else {
         println!("[stream] Resolving audio stream for: {}", target);
 
-        // 1. Primary attempt: standard yt-dlp with cookies (most reliable, supports all formats)
-        println!("[stream] Trying standard yt-dlp resolution with cookies for: {}", target);
-        let mut cmd_std = Command::new(&yt_cmd);
-        apply_yt_dlp_common_args(&mut cmd_std);
-        cmd_std.args([
+        // 1. Android client without cookies (bypasses YouTube 429 datacenter IP blocks completely)
+        println!("[stream] Trying YouTube player_client=android (datacenter bypass) for: {}", target);
+        let mut cmd_android = Command::new(&yt_cmd);
+        apply_yt_dlp_common_args_no_cookies(&mut cmd_android);
+        cmd_android.args([
             "--no-playlist",
             "-g",
-            "-f", "bestaudio/ba/b",
+            "-f", "bestaudio/b",
+            "--extractor-args", "youtube:player_client=android",
             "--",
             &target,
         ]);
-        if let Ok(Ok(out)) = tokio::time::timeout(Duration::from_secs(12), cmd_std.output()).await {
+        if let Ok(Ok(out)) = tokio::time::timeout(Duration::from_secs(15), cmd_android.output()).await {
             if let Some(u) = extract_stream_url_from_output(&out) {
                 direct_url = u;
             }
         }
 
-        // 2. Secondary attempt: try web, mweb, or android clients
+        // 2. Standard yt-dlp with cookies
         if direct_url.is_empty() {
-            let yt_clients = ["web", "mweb", "android,web"];
+            println!("[stream] Trying standard yt-dlp resolution with cookies for: {}", target);
+            let mut cmd_std = Command::new(&yt_cmd);
+            apply_yt_dlp_common_args(&mut cmd_std);
+            cmd_std.args([
+                "--no-playlist",
+                "-g",
+                "-f", "bestaudio/ba/b",
+                "--",
+                &target,
+            ]);
+            if let Ok(Ok(out)) = tokio::time::timeout(Duration::from_secs(12), cmd_std.output()).await {
+                if let Some(u) = extract_stream_url_from_output(&out) {
+                    direct_url = u;
+                }
+            }
+        }
+
+        // 3. Web and mweb clients
+        if direct_url.is_empty() {
+            let yt_clients = ["web", "mweb"];
             for client in &yt_clients {
                 if !direct_url.is_empty() {
                     break;
@@ -251,25 +271,6 @@ pub async fn stream_audio(
                     if let Some(u) = extract_stream_url_from_output(&out) {
                         direct_url = u;
                     }
-                }
-            }
-        }
-
-        // 3. Fallback: retry without cookies
-        if direct_url.is_empty() {
-            println!("[stream] Cookie attempts failed, trying without cookies...");
-            let mut cmd_nc = Command::new(&yt_cmd);
-            apply_yt_dlp_common_args_no_cookies(&mut cmd_nc);
-            cmd_nc.args([
-                "--no-playlist",
-                "-g",
-                "-f", "bestaudio/ba/b",
-                "--",
-                &target,
-            ]);
-            if let Ok(Ok(out)) = tokio::time::timeout(Duration::from_secs(12), cmd_nc.output()).await {
-                if let Some(u) = extract_stream_url_from_output(&out) {
-                    direct_url = u;
                 }
             }
         }
