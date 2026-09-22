@@ -92,7 +92,7 @@ fn extract_video_id(url: &str) -> Option<String> {
 
 pub async fn extract_info(Query(params): Query<ExtractParams>) -> Result<Json<ExtractResponse>, StatusCode> {
     let url = params.url.trim();
-    if url.is_empty() {
+    if url.is_empty() || url.starts_with('-') {
         return Err(StatusCode::BAD_REQUEST);
     }
 
@@ -176,11 +176,12 @@ pub async fn extract_info(Query(params): Query<ExtractParams>) -> Result<Json<Ex
     let mut cmd = Command::new(&yt_cmd);
     apply_yt_dlp_common_args(&mut cmd);
     cmd.args([
-        url,
         "--dump-json",
         "--flat-playlist",
         "--playlist-end",
         "100",
+        "--",
+        url,
     ])
     .stdout(Stdio::piped())
     .stderr(Stdio::null());

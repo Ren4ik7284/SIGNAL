@@ -4,6 +4,7 @@ use axum::Json;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sqlx::Row;
+use std::time::Instant;
 use uuid::Uuid;
 
 use crate::auth::{
@@ -436,8 +437,44 @@ pub async fn register(
 
 pub async fn login(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(payload): Json<LoginRequest>,
 ) -> Result<Json<AuthResponse>, (StatusCode, Json<Value>)> {
+    // Rate-limit: не более 10 попыток за 5 минут с одного IP+логина
+    let rate_key = {
+        let ip = headers
+            .get("x-forwarded-for")
+            .or_else(|| headers.get("x-real-ip"))
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("unknown")
+            .split(',')
+            .next()
+            .unwrap_or("unknown")
+            .trim()
+            .to_string();
+        format!("{}:{}", ip, payload.login.trim().to_lowercase())
+    };
+
+    {
+        let mut attempts = state.login_attempts.lock().unwrap_or_else(|e| e.into_inner());
+        let now = Instant::now();
+        let window = std::time::Duration::from_secs(300); // 5 минут
+        let max_attempts = 10u32;
+
+        let entry = attempts.entry(rate_key.clone()).or_insert((0, now));
+        if now.duration_since(entry.1) > window {
+            *entry = (1, now); // сброс окна
+        } else {
+            entry.0 += 1;
+            if entry.0 > max_attempts {
+                return Err((
+                    StatusCode::TOO_MANY_REQUESTS,
+                    Json(json!({ "error": "Слишком много попыток входа. Подождите 5 минут." })),
+                ));
+            }
+        }
+    }
+
     let login = payload.login.trim();
     let password = payload.password.trim();
 
@@ -487,6 +524,12 @@ pub async fn login(
             StatusCode::UNAUTHORIZED,
             Json(json!({ "error": "Неверный логин/email или пароль" })),
         ));
+    }
+
+    // Успешный вход — сбрасываем счётчик попыток
+    {
+        let mut attempts = state.login_attempts.lock().unwrap_or_else(|e| e.into_inner());
+        attempts.remove(&rate_key);
     }
 
     let token = create_jwt(&user_id, &db_username, db_email.as_deref()).map_err(|_| {

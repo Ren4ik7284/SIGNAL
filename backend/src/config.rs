@@ -51,7 +51,8 @@ pub fn has_chromium_profile() -> bool {
 
 pub fn apply_yt_dlp_common_args(cmd: &mut Command) {
     cmd.stdin(Stdio::null());
-    cmd.stderr(Stdio::null());
+    // Keep stderr for server-side debug logs; caller can suppress if needed
+    cmd.stderr(Stdio::inherit());
     cmd.args([
         "--no-warnings",
         "--no-check-certificates",
@@ -75,17 +76,36 @@ pub fn apply_yt_dlp_common_args(cmd: &mut Command) {
     }
 }
 
+/// Same as apply_yt_dlp_common_args but skips cookies — used as fallback when cookies fail
+pub fn apply_yt_dlp_common_args_no_cookies(cmd: &mut Command) {
+    cmd.stdin(Stdio::null());
+    cmd.stderr(Stdio::inherit());
+    cmd.args([
+        "--no-warnings",
+        "--no-check-certificates",
+    ]);
+    if let Ok(proxy) = std::env::var("YOUTUBE_PROXY") {
+        let p = proxy.trim();
+        if !p.is_empty() {
+            cmd.arg("--proxy").arg(p);
+        }
+    }
+}
+
 pub async fn ensure_cookies_on_start() {
     if !has_chromium_profile() {
         println!("[SIGNAL] Running in container or without Chromium profile, skipping cookie auto-export.");
         return;
     }
     let yt_cmd = get_yt_dlp_cmd();
-    println!("[SIGNAL] Chromium profile detected. Refreshing cookies.txt from chromium...");
+    let home = std::env::var("HOME").unwrap_or_default();
+    // Write to the canonical path that get_cookies_path() prefers
+    let cookies_path = format!("{}/music-player/backend/cookies.txt", home);
+    println!("[SIGNAL] Chromium profile detected. Refreshing cookies.txt from chromium → {}", cookies_path);
     let res = Command::new(&yt_cmd)
         .args([
             "--cookies",
-            "cookies.txt",
+            &cookies_path,
             "--cookies-from-browser",
             "chromium",
             "--playlist-items",

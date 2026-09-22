@@ -209,7 +209,7 @@ async fn send_via_smtp(to_email: &str, code: &str) -> Result<(), String> {
 
     let transport = transport_builder.build();
     let send_fut = transport.send(email);
-    match tokio::time::timeout(Duration::from_secs(3), send_fut).await {
+    match tokio::time::timeout(Duration::from_secs(12), send_fut).await {
         Ok(Ok(_)) => Ok(()),
         Ok(Err(e)) => {
             eprintln!("[SIGNAL AUTH] Ошибка отправки SMTP: {}", e);

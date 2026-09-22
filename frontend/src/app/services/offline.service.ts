@@ -1,5 +1,6 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, signal, inject, Injector } from '@angular/core';
 import { Track } from '../models/track.model';
+import { LibraryService } from './library.service';
 
 @Injectable({
   providedIn: 'root',
@@ -8,11 +9,21 @@ export class OfflineService {
   private readonly CACHE_NAME = 'signal-offline-tracks-v1';
   private readonly STORAGE_KEY_OFFLINE = 'signal_offline_tracks_meta';
 
+  private injector = inject(Injector);
   readonly offlineTrackIds = signal<Set<string>>(new Set());
   readonly downloadingTrackIds = signal<Set<string>>(new Set());
 
   constructor() {
     this.loadOfflineIndex();
+  }
+
+  private getBackendBaseUrl(): string {
+    try {
+      const lib = this.injector.get(LibraryService);
+      return lib.getBackendUrl();
+    } catch {
+      return typeof window !== 'undefined' ? window.location.origin : '';
+    }
   }
 
   private loadOfflineIndex() {
@@ -45,6 +56,39 @@ export class OfflineService {
     }
   }
 
+  /**
+   * Сохраняет готовый Blob (например, загруженный локальный файл) в постоянный кэш офлайн.
+   */
+  async saveBlobOffline(track: Track, blob: Blob): Promise<boolean> {
+    if (typeof window === 'undefined' || !('caches' in window)) return false;
+    try {
+      const cache = await caches.open(this.CACHE_NAME);
+      const cacheKey = `/offline-audio/${track.id}`;
+      const responseToCache = new Response(blob, {
+        status: 200,
+        headers: {
+          'Content-Type': blob.type || 'audio/mpeg',
+          'Content-Length': blob.size.toString(),
+          'Accept-Ranges': 'bytes',
+        },
+      });
+      await cache.put(cacheKey, responseToCache);
+
+      const existing = this.getOfflineTracks().filter((t) => t.id !== track.id);
+      const updatedTrack: Track = { ...track, isOffline: true };
+      existing.push(updatedTrack);
+      localStorage.setItem(this.STORAGE_KEY_OFFLINE, JSON.stringify(existing));
+
+      const updatedIds = new Set(this.offlineTrackIds());
+      updatedIds.add(track.id);
+      this.offlineTrackIds.set(updatedIds);
+      return true;
+    } catch (err) {
+      console.error('[OfflineService] Failed to cache blob track:', err);
+      return false;
+    }
+  }
+
   async saveTrackOffline(track: Track): Promise<boolean> {
     if (typeof window === 'undefined' || !('caches' in window)) {
       return false;
@@ -59,10 +103,19 @@ export class OfflineService {
 
     try {
       let audioUrl = track.audioUrl;
-      if (audioUrl.includes('/api/stream') && !audioUrl.includes('title=')) {
+
+      // Resolve relative /api/stream URLs to the active backend URL (not window.location.origin)
+      if (!audioUrl.startsWith('blob:') && !audioUrl.startsWith('http')) {
+        const backendBase = this.getBackendBaseUrl();
+        audioUrl = `${backendBase}${audioUrl.startsWith('/') ? '' : '/'}${audioUrl}`;
+      }
+
+      // Add title/artist metadata to stream URL for better backend resolution
+      if (audioUrl.includes('/api/stream') && !audioUrl.includes('title=') && track.title) {
         const glue = audioUrl.includes('?') ? '&' : '?';
         audioUrl = `${audioUrl}${glue}title=${encodeURIComponent(track.title || '')}&artist=${encodeURIComponent(track.artist || '')}`;
       }
+
       const resp = await fetch(audioUrl, { mode: 'cors' });
       if (!resp.ok) {
         throw new Error(`Failed to download audio: ${resp.status}`);

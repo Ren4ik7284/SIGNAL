@@ -9,7 +9,7 @@ use std::time::Duration;
 use tokio::process::Command;
 use tokio_util::io::ReaderStream;
 
-use crate::config::{apply_yt_dlp_common_args, get_yt_dlp_cmd, is_cloud_env, CLOUD_FALLBACK_URL};
+use crate::config::{apply_yt_dlp_common_args, apply_yt_dlp_common_args_no_cookies, get_yt_dlp_cmd, is_cloud_env, CLOUD_FALLBACK_URL};
 use crate::models::StreamParams;
 
 fn extract_stream_url_from_output(out: &std::process::Output) -> Option<String> {
@@ -125,7 +125,7 @@ pub async fn stream_audio(
         }
     }
 
-    if target.is_empty() {
+    if target.is_empty() || target.starts_with('-') {
         return Err(StatusCode::BAD_REQUEST);
     }
 
@@ -140,14 +140,29 @@ pub async fn stream_audio(
         || target.contains(":80")
     {
         direct_url = target.clone();
-    } else if target.contains("soundcloud.com") {
+    } else if target.contains("soundcloud.com") || target.starts_with("scsearch") {
         println!("[stream] Resolving SoundCloud stream for: {}", target);
+
+        // Attempt 1: with cookies
         let mut sc_cmd = Command::new(&yt_cmd);
         apply_yt_dlp_common_args(&mut sc_cmd);
-        sc_cmd.args(["-g", "-f", "bestaudio/b", &target]);
+        sc_cmd.args(["-g", "-f", "bestaudio/b", "--", &target]);
         if let Ok(Ok(out)) = tokio::time::timeout(Duration::from_secs(15), sc_cmd.output()).await {
             if let Some(u) = extract_stream_url_from_output(&out) {
                 direct_url = u;
+            }
+        }
+
+        // Attempt 2: without cookies (SoundCloud rejects stale cookies)
+        if direct_url.is_empty() {
+            println!("[stream] SoundCloud with cookies failed, retrying without cookies...");
+            let mut sc_cmd2 = Command::new(&yt_cmd);
+            apply_yt_dlp_common_args_no_cookies(&mut sc_cmd2);
+            sc_cmd2.args(["-g", "-f", "bestaudio/b", "--", &target]);
+            if let Ok(Ok(out)) = tokio::time::timeout(Duration::from_secs(15), sc_cmd2.output()).await {
+                if let Some(u) = extract_stream_url_from_output(&out) {
+                    direct_url = u;
+                }
             }
         }
 
@@ -165,7 +180,7 @@ pub async fn stream_audio(
                 };
                 let mut alt_cmd = Command::new(&yt_cmd);
                 apply_yt_dlp_common_args(&mut alt_cmd);
-                alt_cmd.args(["-g", "-f", "bestaudio/b", &query]);
+                alt_cmd.args(["-g", "-f", "bestaudio/b", "--", &query]);
                 if let Ok(Ok(alt_out)) = tokio::time::timeout(Duration::from_secs(15), alt_cmd.output()).await {
                     if let Some(u) = extract_stream_url_from_output(&alt_out) {
                         direct_url = u;
@@ -181,7 +196,8 @@ pub async fn stream_audio(
                     yt_alt.args([
                         "-g",
                         "-f", "bestaudio/ba/b",
-                        "--extractor-args", "youtube:player_client=android,web",
+                        "--extractor-args", "youtube:player_client=ios,web",
+                        "--",
                         &yt_query,
                     ]);
                     if let Ok(Ok(yt_out)) = tokio::time::timeout(Duration::from_secs(15), yt_alt.output()).await {
@@ -194,19 +210,54 @@ pub async fn stream_audio(
         }
     } else {
         println!("[stream] Resolving audio stream for: {}", target);
-        let mut cmd = Command::new(&yt_cmd);
-        cmd.args([
-            "--no-playlist",
-            "-g",
-            "-f", "bestaudio/ba/b",
-            "--extractor-args", "youtube:player_client=android,web",
-        ]);
-        apply_yt_dlp_common_args(&mut cmd);
-        cmd.arg(&target);
 
-        if let Ok(Ok(out)) = tokio::time::timeout(Duration::from_secs(15), cmd.output()).await {
-            if let Some(u) = extract_stream_url_from_output(&out) {
-                direct_url = u;
+        // Try multiple YouTube player clients in order of reliability
+        let yt_clients = [
+            "ios,web",
+            "android,web",
+            "mweb",
+        ];
+
+        for client in &yt_clients {
+            if !direct_url.is_empty() {
+                break;
+            }
+            println!("[stream] Trying YouTube player_client={} for: {}", client, target);
+            let mut cmd = Command::new(&yt_cmd);
+            apply_yt_dlp_common_args(&mut cmd);
+            cmd.args([
+                "--no-playlist",
+                "-g",
+                "-f", "bestaudio/ba/b",
+                "--extractor-args", &format!("youtube:player_client={}", client),
+                "--",
+                &target,
+            ]);
+
+            if let Ok(Ok(out)) = tokio::time::timeout(Duration::from_secs(12), cmd.output()).await {
+                if let Some(u) = extract_stream_url_from_output(&out) {
+                    direct_url = u;
+                }
+            }
+        }
+
+        // Fallback: retry ios,web WITHOUT cookies (bot-check bypass without account)
+        if direct_url.is_empty() {
+            println!("[stream] All cookie-based attempts failed, trying ios,web without cookies...");
+            let mut cmd_nc = Command::new(&yt_cmd);
+            apply_yt_dlp_common_args_no_cookies(&mut cmd_nc);
+            cmd_nc.args([
+                "--no-playlist",
+                "-g",
+                "-f", "bestaudio/ba/b",
+                "--extractor-args", "youtube:player_client=ios,web",
+                "--",
+                &target,
+            ]);
+            if let Ok(Ok(out)) = tokio::time::timeout(Duration::from_secs(15), cmd_nc.output()).await {
+                if let Some(u) = extract_stream_url_from_output(&out) {
+                    direct_url = u;
+                }
             }
         }
 
@@ -297,8 +348,8 @@ pub async fn stream_audio(
 
                 println!("[stream] Trying SoundCloud fallback: {}", sc_query);
                 let mut sc_fallback = Command::new(&yt_cmd);
-                sc_fallback.args(["-g", "-f", "bestaudio/b"]);
                 apply_yt_dlp_common_args(&mut sc_fallback);
+                sc_fallback.args(["-g", "-f", "bestaudio/b"]);
                 sc_fallback.arg(&sc_query);
 
                 if let Ok(Ok(sc)) = tokio::time::timeout(Duration::from_secs(15), sc_fallback.output()).await {
@@ -422,7 +473,9 @@ pub async fn stream_audio(
         "pipe:1".to_string(),
     ]);
 
-    let mut ffmpeg_child = match Command::new("ffmpeg")
+    let mut ffmpeg_cmd = Command::new("ffmpeg");
+    ffmpeg_cmd.kill_on_drop(true);
+    let mut ffmpeg_child = match ffmpeg_cmd
         .args(&ffmpeg_args)
         .stdout(Stdio::piped())
         .stderr(Stdio::null())

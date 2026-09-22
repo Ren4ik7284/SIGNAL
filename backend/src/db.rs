@@ -1,4 +1,4 @@
-use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
 use sqlx::{Pool, Sqlite};
 use std::str::FromStr;
 
@@ -17,10 +17,16 @@ pub async fn init_db() -> Result<DbPool, sqlx::Error> {
     println!("[SIGNAL DB] Использование базы данных: {}", db_url);
 
     let connection_options = SqliteConnectOptions::from_str(&db_url)?
-        .create_if_missing(true);
+        .create_if_missing(true)
+        // WAL mode: параллельные читатели не блокируют писателя
+        .journal_mode(SqliteJournalMode::Wal)
+        // Ожидаем 5 сек вместо немедленного SQLITE_BUSY
+        .pragma("busy_timeout", "5000")
+        .pragma("synchronous", "NORMAL")
+        .pragma("foreign_keys", "ON");
 
     let pool = SqlitePoolOptions::new()
-        .max_connections(5)
+        .max_connections(10)
         .connect_with(connection_options)
         .await?;
 
@@ -163,6 +169,15 @@ pub async fn init_db() -> Result<DbPool, sqlx::Error> {
     )
     .execute(&pool)
     .await?;
+
+    // Индексы для ускорения запросов истории и wrapped-stats
+    let _ = sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_history_user_played ON listening_history(user_id, played_at DESC)"
+    ).execute(&pool).await;
+
+    let _ = sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_tracks_user ON tracks(user_id)"
+    ).execute(&pool).await;
 
     Ok(pool)
 }

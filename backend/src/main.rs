@@ -8,8 +8,12 @@ mod ytdlp;
 
 use axum::routing::{get, post};
 use axum::Router;
+use std::collections::HashMap;
 use std::net::SocketAddr;
-use tower_http::cors::CorsLayer;
+use std::sync::{Arc, Mutex};
+use std::time::Instant;
+use tower_http::cors::{Any, CorsLayer};
+use tower_http::limit::RequestBodyLimitLayer;
 
 use config::ensure_cookies_on_start;
 use db::{init_db, DbPool};
@@ -24,14 +28,25 @@ use handlers::search::{extract_info, search_music};
 use handlers::stats::get_wrapped;
 use handlers::stream::stream_audio;
 
+/// Состояние rate-limiting для эндпоинта логина.
+/// Ключ: "IP:login", значение: (кол-во попыток, время первой попытки в окне)
+pub type LoginAttempts = Arc<Mutex<HashMap<String, (u32, Instant)>>>;
+
 #[derive(Clone)]
 pub struct AppState {
     pub pool: DbPool,
+    pub login_attempts: LoginAttempts,
 }
 
 #[tokio::main]
 async fn main() {
-    ensure_cookies_on_start().await;
+    // Предупреждение если JWT секрет не задан
+    if std::env::var("JWT_SECRET").is_err() {
+        eprintln!("[SIGNAL WARN] JWT_SECRET не задан! Используется дефолтный ключ — НЕБЕЗОПАСНО для продакшена. Задайте переменную окружения JWT_SECRET.");
+    }
+
+    // Refresh cookies in background — don't block server startup
+    tokio::spawn(ensure_cookies_on_start());
 
     let pool = match init_db().await {
         Ok(p) => p,
@@ -41,8 +56,29 @@ async fn main() {
         }
     };
 
-    let state = AppState { pool };
-    let cors = CorsLayer::permissive();
+    let state = AppState {
+        pool,
+        login_attempts: Arc::new(Mutex::new(HashMap::new())),
+    };
+
+    // CORS: разрешаем любые origins (self-hosted), но без credentials cookie
+    // Для продакшена с фиксированным доменом задайте ALLOWED_ORIGINS=https://yourdomain.com
+    let cors = if let Ok(origins_str) = std::env::var("ALLOWED_ORIGINS") {
+        let allowed: Vec<axum::http::HeaderValue> = origins_str
+            .split(',')
+            .filter_map(|s| s.trim().parse().ok())
+            .collect();
+        if allowed.is_empty() {
+            CorsLayer::permissive()
+        } else {
+            CorsLayer::new()
+                .allow_origin(allowed)
+                .allow_headers(Any)
+                .allow_methods(Any)
+        }
+    } else {
+        CorsLayer::permissive()
+    };
 
     let app = Router::new()
         .route("/", get(|| async { "SIGNAL // Audio Backend is running" }))
@@ -62,6 +98,8 @@ async fn main() {
         .route("/api/search", get(search_music))
         .route("/api/extract", get(extract_info))
         .route("/api/stream", get(stream_audio))
+        // Лимит тела запроса: 5 МБ для /api/sync, защита от огромных payload
+        .layer(RequestBodyLimitLayer::new(5 * 1024 * 1024))
         .layer(cors)
         .with_state(state);
 

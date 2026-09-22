@@ -1,4 +1,4 @@
-import { Injectable, signal, computed, inject } from '@angular/core';
+import { Injectable, signal, computed, inject, OnDestroy } from '@angular/core';
 import { Track, Playlist, RadioStation } from '../models/track.model';
 import { OfflineService } from './offline.service';
 import { AuthService, HistoryItem, WrappedStats } from './auth.service';
@@ -14,17 +14,38 @@ export interface ExtractedResult {
 @Injectable({
   providedIn: 'root',
 })
-export class LibraryService {
+export class LibraryService implements OnDestroy {
   private activeBackendUrl =
     typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1'
       ? window.location.origin
       : 'https://signal-audio-backend-production.up.railway.app';
   private readonly FALLBACK_BACKEND_URL = 'https://signal-audio-backend-production.up.railway.app';
-  private readonly STORAGE_KEY_TRACKS = 'signal_music_user_tracks';
-  private readonly STORAGE_KEY_FAVORITES = 'signal_music_favorites';
-  private readonly STORAGE_KEY_PLAYLISTS = 'signal_music_playlists';
-  private readonly STORAGE_KEY_STATIONS = 'signal_music_radio_stations';
-  private readonly STORAGE_KEY_UPDATED_AT = 'signal_music_updated_at';
+
+  readonly offlineService = inject(OfflineService);
+  readonly authService = inject(AuthService);
+
+  // --- Ключи localStorage изолированы по user_id ---
+  // Гость использует 'guest', авторизованный — свой UUID.
+  // Это гарантирует что два пользователя на одном браузере видят только своё.
+  private get storageUserId(): string {
+    return this.authService.currentUser()?.id || 'guest';
+  }
+
+  private get STORAGE_KEY_TRACKS(): string {
+    return `signal_tracks_${this.storageUserId}`;
+  }
+  private get STORAGE_KEY_FAVORITES(): string {
+    return `signal_favs_${this.storageUserId}`;
+  }
+  private get STORAGE_KEY_PLAYLISTS(): string {
+    return `signal_playlists_${this.storageUserId}`;
+  }
+  private get STORAGE_KEY_STATIONS(): string {
+    return `signal_stations_${this.storageUserId}`;
+  }
+  private get STORAGE_KEY_UPDATED_AT(): string {
+    return `signal_updated_at_${this.storageUserId}`;
+  }
 
   readonly defaultTracks: Track[] = [
     {
@@ -105,93 +126,21 @@ export class LibraryService {
   ];
 
   readonly defaultRadioStations: RadioStation[] = [
-    {
-      id: 'default-1',
-      name: 'Record Chill-Out',
-      streamUrl: 'https://radiorecord.hostingradio.ru/chil96.aacp',
-      genre: 'Chillout / Lounge',
-      country: 'RU',
-      bitrate: '96k AAC',
-    },
-    {
-      id: 'default-2',
-      name: 'Europa Plus',
-      streamUrl: 'https://ep256.hostingradio.ru:8052/europaplus256.mp3',
-      genre: 'Pop / Top 40',
-      country: 'RU',
-      bitrate: '256k MP3',
-    },
-    {
-      id: 'default-3',
-      name: 'SomaFM: Groove Salad',
-      streamUrl: 'https://ice4.somafm.com/groovesalad-128-mp3',
-      genre: 'Ambient / Downtempo',
-      country: 'US',
-      bitrate: '128k Live',
-    },
-    {
-      id: 'default-4',
-      name: 'SomaFM: Drone Zone',
-      streamUrl: 'https://ice2.somafm.com/dronezone-128-mp3',
-      genre: 'Space / Atmospheric',
-      country: 'US',
-      bitrate: '128k Live',
-    },
-    {
-      id: 'default-5',
-      name: 'SomaFM: DEF CON Radio',
-      streamUrl: 'https://ice6.somafm.com/defcon-128-mp3',
-      genre: 'Electronic / Cyber',
-      country: 'US',
-      bitrate: '128k Live',
-    },
-    {
-      id: 'default-6',
-      name: 'Record Deep',
-      streamUrl: 'https://radiorecord.hostingradio.ru/deep96.aacp',
-      genre: 'Deep House',
-      country: 'RU',
-      bitrate: '96k AAC',
-    },
-    {
-      id: 'default-7',
-      name: 'Record Synthwave',
-      streamUrl: 'https://radiorecord.hostingradio.ru/synth96.aacp',
-      genre: 'Synthwave / Retro',
-      country: 'RU',
-      bitrate: '96k AAC',
-    },
-    {
-      id: 'default-8',
-      name: 'Record Lo-Fi',
-      streamUrl: 'https://radiorecord.hostingradio.ru/lofi96.aacp',
-      genre: 'Lo-Fi / Beats',
-      country: 'RU',
-      bitrate: '96k AAC',
-    },
-    {
-      id: 'default-9',
-      name: 'SomaFM: Secret Agent',
-      streamUrl: 'https://ice1.somafm.com/secretagent-128-mp3',
-      genre: 'Spy / Lounge',
-      country: 'US',
-      bitrate: '128k Live',
-    },
-    {
-      id: 'default-10',
-      name: 'Record Russian Hits',
-      streamUrl: 'https://radiorecord.hostingradio.ru/rus96.aacp',
-      genre: 'Pop / Russian',
-      country: 'RU',
-      bitrate: '96k AAC',
-    },
+    { id: 'default-1', name: 'Record Chill-Out', streamUrl: 'https://radiorecord.hostingradio.ru/chil96.aacp', genre: 'Chillout / Lounge', country: 'RU', bitrate: '96k AAC' },
+    { id: 'default-2', name: 'Europa Plus', streamUrl: 'https://ep256.hostingradio.ru:8052/europaplus256.mp3', genre: 'Pop / Top 40', country: 'RU', bitrate: '256k MP3' },
+    { id: 'default-3', name: 'SomaFM: Groove Salad', streamUrl: 'https://ice4.somafm.com/groovesalad-128-mp3', genre: 'Ambient / Downtempo', country: 'US', bitrate: '128k Live' },
+    { id: 'default-4', name: 'SomaFM: Drone Zone', streamUrl: 'https://ice2.somafm.com/dronezone-128-mp3', genre: 'Space / Atmospheric', country: 'US', bitrate: '128k Live' },
+    { id: 'default-5', name: 'SomaFM: DEF CON Radio', streamUrl: 'https://ice6.somafm.com/defcon-128-mp3', genre: 'Electronic / Cyber', country: 'US', bitrate: '128k Live' },
+    { id: 'default-6', name: 'Record Deep', streamUrl: 'https://radiorecord.hostingradio.ru/deep96.aacp', genre: 'Deep House', country: 'RU', bitrate: '96k AAC' },
+    { id: 'default-7', name: 'Record Synthwave', streamUrl: 'https://radiorecord.hostingradio.ru/synth96.aacp', genre: 'Synthwave / Retro', country: 'RU', bitrate: '96k AAC' },
+    { id: 'default-8', name: 'Record Lo-Fi', streamUrl: 'https://radiorecord.hostingradio.ru/lofi96.aacp', genre: 'Lo-Fi / Beats', country: 'RU', bitrate: '96k AAC' },
+    { id: 'default-9', name: 'SomaFM: Secret Agent', streamUrl: 'https://ice1.somafm.com/secretagent-128-mp3', genre: 'Spy / Lounge', country: 'US', bitrate: '128k Live' },
+    { id: 'default-10', name: 'Record Russian Hits', streamUrl: 'https://radiorecord.hostingradio.ru/rus96.aacp', genre: 'Pop / Russian', country: 'RU', bitrate: '96k AAC' },
   ];
 
   readonly tracks = signal<Track[]>([]);
   readonly playlists = signal<Playlist[]>([]);
   readonly radioStations = signal<RadioStation[]>([]);
-  readonly offlineService = inject(OfflineService);
-  readonly authService = inject(AuthService);
   readonly searchQuery = signal<string>('');
   readonly selectedGenre = signal<string>('all');
   readonly selectedView = signal<'all' | 'favorites' | 'uploads' | 'streams' | 'playlist' | 'offline'>('all');
@@ -251,9 +200,10 @@ export class LibraryService {
   });
 
   readonly isCloudSynced = signal<boolean>(false);
-  private syncTimeout: any = null;
-
-  private syncPollInterval: any = null;
+  private syncTimeout: ReturnType<typeof setTimeout> | null = null;
+  private syncPollInterval: ReturnType<typeof setInterval> | null = null;
+  private visibilityHandler: (() => void) | null = null;
+  private focusHandler: (() => void) | null = null;
 
   constructor() {
     this.initLibrary();
@@ -261,6 +211,13 @@ export class LibraryService {
       this.syncWithBackendOnStartup();
       this.startAutoSync();
     });
+  }
+
+  ngOnDestroy(): void {
+    if (this.syncPollInterval) clearInterval(this.syncPollInterval);
+    if (this.syncTimeout) clearTimeout(this.syncTimeout);
+    if (this.visibilityHandler) document.removeEventListener('visibilitychange', this.visibilityHandler);
+    if (this.focusHandler) window.removeEventListener('focus', this.focusHandler);
   }
 
   getBackendUrl(): string {
@@ -274,21 +231,19 @@ export class LibraryService {
   startAutoSync() {
     if (this.syncPollInterval || typeof window === 'undefined') return;
 
-    // Periodic sync every 5 seconds so mobile & PC instantly reflect added tracks
     this.syncPollInterval = setInterval(() => {
       this.syncWithBackendOnStartup();
     }, 5000);
 
-    // Sync immediately on tab focus or screen unlock (mobile PWA / browser)
-    document.addEventListener('visibilitychange', () => {
+    this.visibilityHandler = () => {
       if (document.visibilityState === 'visible') {
         this.syncWithBackendOnStartup();
       }
-    });
+    };
+    this.focusHandler = () => this.syncWithBackendOnStartup();
 
-    window.addEventListener('focus', () => {
-      this.syncWithBackendOnStartup();
-    });
+    document.addEventListener('visibilitychange', this.visibilityHandler);
+    window.addEventListener('focus', this.focusHandler);
   }
 
   private initLibrary() {
@@ -408,7 +363,7 @@ export class LibraryService {
       if (!res.ok) throw new Error('Search failed');
 
       const data: { id: string; title: string; artist: string; duration: number; audio_url: string; cover_url?: string }[] = await res.json();
-      
+
       const tracks: Track[] = data.map((item) => ({
         id: 'yt-' + item.id,
         title: item.title,
@@ -509,10 +464,7 @@ export class LibraryService {
       if (existing) {
         finalTrackIds.push(existing.id);
       } else {
-        const playlistTrack: Track = {
-          ...t,
-          playlistOnly: true,
-        };
+        const playlistTrack: Track = { ...t, playlistOnly: true };
         newTracks.push(playlistTrack);
         finalTrackIds.push(playlistTrack.id);
       }
@@ -592,9 +544,7 @@ export class LibraryService {
 
   scheduleCloudSync() {
     this.isCloudSynced.set(false);
-    if (this.syncTimeout) {
-      clearTimeout(this.syncTimeout);
-    }
+    if (this.syncTimeout) clearTimeout(this.syncTimeout);
     this.syncTimeout = setTimeout(() => {
       this.pushLibraryToBackend();
     }, 1500);
@@ -602,6 +552,9 @@ export class LibraryService {
 
   async pushLibraryToBackend() {
     if (!this.isBackendOnline()) return;
+    // Синкаем только авторизованных — у каждого своя библиотека на сервере
+    if (!this.authService.isAuthenticated()) return;
+
     try {
       const updatedAt = Date.now();
       try {
@@ -632,8 +585,21 @@ export class LibraryService {
     }
   }
 
+  /**
+   * Синхронизация с бэкендом.
+   * Умное слияние — НЕ стирает локальные треки, а ОБЪЕДИНЯЕТ.
+   *
+   * Логика:
+   * 1. Нет авторизации → не трогаем ничего (локальные данные гостя)
+   * 2. Только дефолтные треки → берём из облака полностью (первый вход)
+   * 3. Есть свои треки → объединяем (union по id и audioUrl), не заменяем
+   * 4. Локальное новее → пушим в облако
+   */
   async syncWithBackendOnStartup(forceCloud = false) {
     if (!this.isBackendOnline()) return;
+    // Без авторизации не синкаемся — у каждого своя история
+    if (!this.authService.isAuthenticated()) return;
+
     try {
       const res = await fetch(`${this.getBackendUrl()}/api/sync`, {
         headers: this.authService.getAuthHeaders(),
@@ -649,10 +615,11 @@ export class LibraryService {
         localTracks.length === 0 ||
         localTracks.every((t) => t.id.startsWith('default-track-'));
 
+      // Случай 1: первый вход или force → берём из облака целиком
       if (
         Array.isArray(data.tracks) &&
         data.tracks.length > 0 &&
-        (forceCloud || isOnlyDefaultTracks || cloudUpdatedAt > localUpdatedAt)
+        (forceCloud || isOnlyDefaultTracks)
       ) {
         this.tracks.set(data.tracks);
         if (Array.isArray(data.playlists)) this.playlists.set(data.playlists);
@@ -667,20 +634,32 @@ export class LibraryService {
         return;
       }
 
-      // 2. Bidirectional merge: if cloud has tracks not in local, add them
+      // Случай 2: умное двустороннее слияние
+      // Добавляем треки из облака которых нет локально (по id И по audioUrl)
       if (Array.isArray(data.tracks) && data.tracks.length > 0) {
         const currentTracks = this.tracks();
         const localIds = new Set(currentTracks.map((t) => t.id));
         const localUrls = new Set(currentTracks.map((t) => t.audioUrl));
-        const missingFromLocal = data.tracks.filter((t: Track) => !localIds.has(t.id) && !localUrls.has(t.audioUrl));
+        const missingFromLocal = (data.tracks as Track[]).filter(
+          (t) => !localIds.has(t.id) && !localUrls.has(t.audioUrl)
+        );
         if (missingFromLocal.length > 0) {
           this.tracks.update((cur) => [...missingFromLocal, ...cur]);
           this.saveLocalWithoutCloudSync();
         }
       }
 
-      // 3. If local has tracks and cloud is behind, push local library to cloud
-      if (localTracks.length > 0 && !isOnlyDefaultTracks && (cloudUpdatedAt === 0 || localUpdatedAt > cloudUpdatedAt)) {
+      // Добавляем плейлисты из облака которых нет локально
+      if (Array.isArray(data.playlists) && data.playlists.length > 0) {
+        const localPlIds = new Set(this.playlists().map((p) => p.id));
+        const missingPls = (data.playlists as Playlist[]).filter((p) => !localPlIds.has(p.id));
+        if (missingPls.length > 0) {
+          this.playlists.update((cur) => [...cur, ...missingPls]);
+        }
+      }
+
+      // Случай 3: локальное новее → пушим в облако
+      if (localTracks.length > 0 && !isOnlyDefaultTracks && localUpdatedAt > cloudUpdatedAt) {
         await this.pushLibraryToBackend();
         return;
       }
@@ -703,7 +682,9 @@ export class LibraryService {
     const favs = this.tracks()
       .filter((t) => t.isFavorite)
       .map((t) => t.id);
-    localStorage.setItem(this.STORAGE_KEY_FAVORITES, JSON.stringify(favs));
+    try {
+      localStorage.setItem(this.STORAGE_KEY_FAVORITES, JSON.stringify(favs));
+    } catch {}
     this.persistTracks();
   }
 
@@ -945,9 +926,14 @@ export class LibraryService {
       isFavorite: false,
       addedAt: new Date().toISOString().split('T')[0],
       isLocalUpload: true,
+      isOffline: true,
     };
 
+    // Сохраняем аудиофайл в офлайн-кэш Cache API навсегда, чтобы он работал и после перезагрузки страницы
+    await this.offlineService.saveBlobOffline(newTrack, file);
+
     this.tracks.update((current) => [newTrack, ...current]);
+    this.persistTracks();
     return newTrack;
   }
 
@@ -1055,8 +1041,13 @@ export class LibraryService {
   }
 
   importLibrary(content: string): { tracksCount: number; playlistsCount: number; stationsCount: number } {
-    const data = JSON.parse(content);
-    if (!data) throw new Error('Некорректный JSON файл бэкапа');
+    let data: any;
+    try {
+      data = JSON.parse(content);
+    } catch {
+      throw new Error('Некорректный JSON файл бэкапа — не удалось разобрать файл');
+    }
+    if (!data || typeof data !== 'object') throw new Error('Некорректный формат файла бэкапа');
 
     let importedTracks = 0;
     if (Array.isArray(data.tracks)) {
@@ -1114,7 +1105,7 @@ export class LibraryService {
   }
 
   async recordHistoryPlay(track: Track) {
-    if (!this.isBackendOnline()) return;
+    if (!this.isBackendOnline() || !this.authService.isAuthenticated()) return;
     try {
       await fetch(`${this.getBackendUrl()}/api/history`, {
         method: 'POST',
@@ -1135,7 +1126,7 @@ export class LibraryService {
   }
 
   async getHistory(): Promise<HistoryItem[]> {
-    if (!this.isBackendOnline()) return [];
+    if (!this.isBackendOnline() || !this.authService.isAuthenticated()) return [];
     try {
       const res = await fetch(`${this.getBackendUrl()}/api/history`, {
         headers: this.authService.getAuthHeaders(),
@@ -1148,7 +1139,7 @@ export class LibraryService {
   }
 
   async clearHistory(): Promise<boolean> {
-    if (!this.isBackendOnline()) return false;
+    if (!this.isBackendOnline() || !this.authService.isAuthenticated()) return false;
     try {
       const res = await fetch(`${this.getBackendUrl()}/api/history`, {
         method: 'DELETE',
@@ -1161,7 +1152,7 @@ export class LibraryService {
   }
 
   async getWrappedStats(): Promise<WrappedStats | null> {
-    if (!this.isBackendOnline()) return null;
+    if (!this.isBackendOnline() || !this.authService.isAuthenticated()) return null;
     try {
       const res = await fetch(`${this.getBackendUrl()}/api/stats/wrapped`, {
         headers: this.authService.getAuthHeaders(),
@@ -1173,15 +1164,27 @@ export class LibraryService {
     }
   }
 
+  /**
+   * Вызывается после успешного логина.
+   * Перезагружает библиотеку из namespace текущего пользователя,
+   * затем синкается с облаком.
+   */
   async onUserLoggedIn() {
-    await this.syncWithBackendOnStartup(true);
+    // Перезагружаем из namespace нового пользователя
+    this.initLibrary();
+    // Синкаемся с облаком (не force — уважаем локальные данные)
+    await this.syncWithBackendOnStartup(false);
   }
 
+  /**
+   * Вызывается после выхода из аккаунта.
+   * Переключается на guest namespace с дефолтными треками.
+   */
   onUserLoggedOut() {
     this.tracks.set([...this.defaultTracks]);
     this.playlists.set([]);
     this.radioStations.set([...this.defaultRadioStations]);
     this.saveLocalWithoutCloudSync();
+    this.isCloudSynced.set(false);
   }
 }
-

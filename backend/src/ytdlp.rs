@@ -91,11 +91,12 @@ pub async fn execute_yt_dlp_search(yt_cmd: &str, search_arg: &str, timeout_sec: 
     let mut cmd = Command::new(yt_cmd);
     apply_yt_dlp_common_args(&mut cmd);
     cmd.args([
-        search_arg,
         "--dump-json",
         "--flat-playlist",
         "--playlist-end",
         "50",
+        "--",
+        search_arg,
     ])
     .stdout(Stdio::piped())
     .stderr(Stdio::null());
