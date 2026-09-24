@@ -47,83 +47,7 @@ export class LibraryService implements OnDestroy {
     return `signal_updated_at_${this.storageUserId}`;
   }
 
-  readonly defaultTracks: Track[] = [
-    {
-      id: 'default-track-1',
-      title: 'red weather',
-      artist: 'ONDA ANDAR',
-      album: 'Online Music',
-      duration: 104,
-      audioUrl: '/api/stream?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3DSUCefsDmjk0&title=NO%20ESPERABA%20ESTO&artist=ONDA%20ANDAR',
-      coverUrl: '/api/cover?url=https%3A%2F%2Fi.ytimg.com%2Fvi%2FSUCefsDmjk0%2Fhq720.jpg',
-      genre: 'Electronic',
-      format: 'mp3',
-      bitrate: '192 kbps',
-      plays: 0,
-      isFavorite: false,
-      addedAt: '2026-09-11',
-    },
-    {
-      id: 'default-track-2',
-      title: 'Недоволен',
-      artist: 'Scally Milano',
-      album: 'Online Music',
-      duration: 121,
-      audioUrl: '/api/stream?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3DHVXlDpNainw&title=%D0%9D%D0%B5%D0%B4%D0%BE%D0%B2%D0%BE%D0%BB%D0%B5%D0%BD&artist=Scally%20Milano',
-      coverUrl: '/api/cover?url=https%3A%2F%2Fi.ytimg.com%2Fvi%2FHVXlDpNainw%2Fhq720.jpg',
-      genre: 'Hip-Hop',
-      format: 'mp3',
-      bitrate: '192 kbps',
-      plays: 0,
-      isFavorite: false,
-      addedAt: '2026-09-11',
-    },
-    {
-      id: 'default-track-3',
-      title: 'ДИНАСТИЯ',
-      artist: 'wo',
-      album: 'SoundCloud',
-      duration: 150,
-      audioUrl: '/api/stream?url=https%3A%2F%2Fsoundcloud.com%2Fwwoowwoo%2Fvillian-madk1d-dinastiia',
-      coverUrl: 'https://i1.sndcdn.com/artworks-Z9NZvqkNSb4Z1xrV-E5zm9w-t500x500.jpg',
-      genre: 'Electronic',
-      format: 'mp3',
-      bitrate: '192 kbps',
-      plays: 0,
-      isFavorite: true,
-      addedAt: '2026-09-11',
-    },
-    {
-      id: 'default-track-4',
-      title: 'Mania (Fl Studio Session)',
-      artist: 'SchuberTEKK',
-      album: 'SoundCloud',
-      duration: 252,
-      audioUrl: '/api/stream?url=https%3A%2F%2Fsoundcloud.com%2Forlando-267593096%2Fmania',
-      coverUrl: 'https://i1.sndcdn.com/artworks-VxzuqknJ4ffnSJfg-aAYIYw-t500x500.jpg',
-      genre: 'Techno',
-      format: 'mp3',
-      bitrate: '192 kbps',
-      plays: 0,
-      isFavorite: false,
-      addedAt: '2026-09-11',
-    },
-    {
-      id: 'default-track-5',
-      title: 'Drone Zone 24/7',
-      artist: 'SomaFM Stream',
-      album: 'Live Radio Stations',
-      duration: 0,
-      audioUrl: 'https://ice2.somafm.com/dronezone-128-mp3',
-      genre: 'Ambient',
-      format: 'stream',
-      bitrate: '128k Live',
-      plays: 0,
-      isFavorite: false,
-      addedAt: '2026-09-11',
-      isLiveStream: true,
-    },
-  ];
+  readonly defaultTracks: Track[] = [];
 
   readonly defaultRadioStations: RadioStation[] = [
     { id: 'default-1', name: 'Record Chill-Out', streamUrl: 'https://radiorecord.hostingradio.ru/chil96.aacp', genre: 'Chillout / Lounge', country: 'RU', bitrate: '96k AAC' },
@@ -279,12 +203,11 @@ export class LibraryService implements OnDestroy {
       savedStations = [];
     }
 
-    if (!savedTracks || savedTracks.length === 0) {
-      savedTracks = [...this.defaultTracks];
-      try {
-        localStorage.setItem(this.STORAGE_KEY_TRACKS, JSON.stringify(savedTracks));
-      } catch {}
-    }
+    // Очищаем любые устаревшие демонстрационные треки
+    savedTracks = (savedTracks || []).filter((t) => !t.id.startsWith('default-track-'));
+    try {
+      localStorage.setItem(this.STORAGE_KEY_TRACKS, JSON.stringify(savedTracks));
+    } catch {}
 
     const hasBrokenStations = savedStations.some(
       (s) => s.streamUrl.includes(':8030') || s.streamUrl.includes('wostreaming.net') || s.streamUrl.includes('stream.zeno.fm')
@@ -615,17 +538,18 @@ export class LibraryService implements OnDestroy {
         localTracks.length === 0 ||
         localTracks.every((t) => t.id.startsWith('default-track-'));
 
-      // Случай 1: первый вход или force → берём из облака целиком
-      if (
-        Array.isArray(data.tracks) &&
-        data.tracks.length > 0 &&
-        (forceCloud || isOnlyDefaultTracks)
-      ) {
-        this.tracks.set(data.tracks);
-        if (Array.isArray(data.playlists)) this.playlists.set(data.playlists);
-        if (Array.isArray(data.radio_stations) && data.radio_stations.length > 0) {
-          this.radioStations.set(data.radio_stations);
-        }
+      // Случай 1: forceCloud (вход в аккаунт, смена пользователя) или пустая локалка -> строго берем из облака
+      if (forceCloud || localTracks.length === 0) {
+        const rawTracks: Track[] = Array.isArray(data.tracks) ? data.tracks : [];
+        const cloudTracks: Track[] = rawTracks.filter((t: Track) => !t.id.startsWith('default-track-'));
+        const cloudPlaylists: Playlist[] = Array.isArray(data.playlists) ? data.playlists : [];
+        const cloudStations: RadioStation[] = Array.isArray(data.radio_stations) && data.radio_stations.length > 0
+          ? data.radio_stations
+          : [...this.defaultRadioStations];
+
+        this.tracks.set(cloudTracks);
+        this.playlists.set(cloudPlaylists);
+        this.radioStations.set(cloudStations);
         this.saveLocalWithoutCloudSync();
         try {
           localStorage.setItem(this.STORAGE_KEY_UPDATED_AT, (cloudUpdatedAt || Date.now()).toString());
@@ -1170,19 +1094,24 @@ export class LibraryService implements OnDestroy {
    * затем синкается с облаком.
    */
   async onUserLoggedIn() {
-    // Перезагружаем из namespace нового пользователя
+    // 1. Очищаем состояние в памяти от предыдущей сессии/гостя
+    this.tracks.set([]);
+    this.playlists.set([]);
+    this.activePlaylistId.set(null);
     this.initLibrary();
-    // Синкаемся с облаком (не force — уважаем локальные данные)
-    await this.syncWithBackendOnStartup(false);
+
+    // 2. Всегда загружаем библиотеку этого пользователя из облака
+    await this.syncWithBackendOnStartup(true);
   }
 
   /**
    * Вызывается после выхода из аккаунта.
-   * Переключается на guest namespace с дефолтными треками.
+   * Полностью очищает текущую медиатеку в памяти и гостевом хранилище.
    */
   onUserLoggedOut() {
-    this.tracks.set([...this.defaultTracks]);
+    this.tracks.set([]);
     this.playlists.set([]);
+    this.activePlaylistId.set(null);
     this.radioStations.set([...this.defaultRadioStations]);
     this.saveLocalWithoutCloudSync();
     this.isCloudSynced.set(false);

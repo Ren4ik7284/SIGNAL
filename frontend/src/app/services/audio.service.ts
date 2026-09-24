@@ -558,6 +558,16 @@ export class AudioService {
     }
   }
 
+  stopPlayback() {
+    try {
+      this.audio.pause();
+      this.audio.src = '';
+    } catch {}
+    this.isPlaying.set(false);
+    this.currentTrack.set(null);
+    this.updateMediaSessionPlaybackState('none');
+  }
+
   seek(seconds: number) {
     if (this.isLiveStream()) return;
     const total = this.duration() || this.currentTrack()?.duration || 0;

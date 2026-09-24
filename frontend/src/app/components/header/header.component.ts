@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { LibraryService } from '../../services/library.service';
 import { AuthService } from '../../services/auth.service';
+import { AudioService } from '../../services/audio.service';
 
 @Component({
   selector: 'app-header-bar',
@@ -15,6 +16,7 @@ import { AuthService } from '../../services/auth.service';
 export class HeaderComponent {
   readonly libraryService = inject(LibraryService);
   readonly authService = inject(AuthService);
+  readonly audioService = inject(AudioService);
 
   @Output() openAddModal = new EventEmitter<void>();
   @Output() openOnlineSearch = new EventEmitter<string>();
@@ -44,6 +46,7 @@ export class HeaderComponent {
 
   handleLogout() {
     this.closeUserMenu();
+    this.audioService.stopPlayback();
     this.authService.logout();
     this.libraryService.onUserLoggedOut();
   }
