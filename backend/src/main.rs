@@ -1,7 +1,6 @@
 mod auth;
 mod config;
 mod db;
-mod email;
 mod handlers;
 mod models;
 mod ytdlp;
@@ -17,10 +16,7 @@ use tower_http::limit::RequestBodyLimitLayer;
 
 use config::{ensure_cookies_on_start, init_cookies_from_env};
 use db::{init_db, DbPool};
-use handlers::auth::{
-    confirm_password_reset, get_me, login, register, request_password_reset, resend_verification_code,
-    send_verification_code, verify_registration_code,
-};
+use handlers::auth::{get_auth_config, get_me, google_login, login, register};
 use handlers::cover::{health_check, proxy_cover};
 use handlers::history::{clear_history, get_history, record_play};
 use handlers::library::{get_library, save_library};
@@ -84,16 +80,13 @@ async fn main() {
     };
 
     let app = Router::new()
-        .route("/", get(|| async { "SIGNAL // Audio Backend is running" }))
+        .route("/", get(|| async { "Recro // Audio Backend is running" }))
         .route("/api/health", get(health_check))
         .route("/api/auth/register", post(register))
         .route("/api/auth/login", post(login))
-        .route("/api/auth/send-code", post(send_verification_code))
-        .route("/api/auth/verify-code", post(verify_registration_code))
-        .route("/api/auth/resend-code", post(resend_verification_code))
-        .route("/api/auth/reset-password-code", post(request_password_reset))
-        .route("/api/auth/reset-password", post(confirm_password_reset))
         .route("/api/auth/me", get(get_me))
+        .route("/api/auth/config", get(get_auth_config))
+        .route("/api/auth/google", post(google_login))
         .route("/api/sync", get(get_library).post(save_library))
         .route("/api/history", get(get_history).post(record_play).delete(clear_history))
         .route("/api/stats/wrapped", get(get_wrapped))
@@ -111,8 +104,10 @@ async fn main() {
         .and_then(|p| p.parse().ok())
         .unwrap_or(8085);
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], port));
-    println!("Server running on port {}", port);
+    let host = std::env::var("HOST").unwrap_or_else(|_| "0.0.0.0".to_string());
+    let ip: std::net::IpAddr = host.parse().unwrap_or(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED));
+    let addr = SocketAddr::from((ip, port));
+    println!("Server running on http://{}:{}", ip, port);
 
     let listener = match tokio::net::TcpListener::bind(addr).await {
         Ok(l) => l,

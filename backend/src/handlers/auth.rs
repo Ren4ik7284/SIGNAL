@@ -4,337 +4,56 @@ use axum::Json;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sqlx::Row;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use uuid::Uuid;
 
 use crate::auth::{
-    create_jwt, extract_claims_from_headers, hash_password, validate_email, validate_password,
-    validate_username, verify_password, AuthResponse, ConfirmResetPasswordRequest, LoginRequest,
-    RegisterRequest, ResetPasswordRequest, SendCodeRequest, UserInfo, VerifyCodeRequest,
+    create_jwt, extract_claims_from_headers, hash_password, validate_password,
+    validate_username, verify_password, AuthConfigResponse, AuthResponse, GoogleAuthRequest,
+    LoginRequest, RegisterRequest, UserInfo,
 };
-use crate::email::send_verification_email;
 use crate::AppState;
-
-#[derive(Debug, Deserialize)]
-pub struct ResendCodeRequest {
-    pub email: String,
-}
-
-pub async fn send_verification_code(
-    State(state): State<AppState>,
-    Json(payload): Json<SendCodeRequest>,
-) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    if let Err(err) = validate_username(&payload.username) {
-        return Err((StatusCode::BAD_REQUEST, Json(json!({ "error": err }))));
-    }
-
-    if let Err(err) = validate_password(&payload.password) {
-        return Err((StatusCode::BAD_REQUEST, Json(json!({ "error": err }))));
-    }
-
-    let clean_email = match validate_email(&payload.email) {
-        Ok(e) => e,
-        Err(err) => return Err((StatusCode::BAD_REQUEST, Json(json!({ "error": err })))),
-    };
-
-    let clean_username = payload.username.trim();
-
-    let user_by_name = sqlx::query("SELECT id FROM users WHERE username = ?")
-        .bind(clean_username)
-        .fetch_optional(&state.pool)
-        .await
-        .map_err(|_| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "error": "Ошибка базы данных" })),
-            )
-        })?;
-
-    if user_by_name.is_some() {
-        return Err((
-            StatusCode::CONFLICT,
-            Json(json!({ "error": "Пользователь с таким именем уже существует" })),
-        ));
-    }
-
-    let user_by_email = sqlx::query("SELECT id FROM users WHERE email = ?")
-        .bind(&clean_email)
-        .fetch_optional(&state.pool)
-        .await
-        .map_err(|_| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "error": "Ошибка базы данных" })),
-            )
-        })?;
-
-    if user_by_email.is_some() {
-        return Err((
-            StatusCode::CONFLICT,
-            Json(json!({ "error": "Аккаунт с таким адресом email уже зарегистрирован" })),
-        ));
-    }
-
-    let password_hash = hash_password(payload.password.trim()).map_err(|_| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "error": "Не удалось захэшировать пароль" })),
-        )
-    })?;
-
-    let code = format!("{:06}", fastrand::u32(100000..=999999));
-    let now = chrono::Utc::now().timestamp();
-    let expires_at = now + 900;
-
-    sqlx::query(
-        r#"
-        INSERT INTO email_verifications (email, code, username, password_hash, expires_at, created_at, attempts)
-        VALUES (?, ?, ?, ?, ?, ?, 0)
-        ON CONFLICT(email) DO UPDATE SET
-            code = excluded.code,
-            username = excluded.username,
-            password_hash = excluded.password_hash,
-            expires_at = excluded.expires_at,
-            created_at = excluded.created_at,
-            attempts = 0
-        "#,
-    )
-    .bind(&clean_email)
-    .bind(&code)
-    .bind(clean_username)
-    .bind(&password_hash)
-    .bind(expires_at)
-    .bind(now)
-    .execute(&state.pool)
-    .await
-    .map_err(|_| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "error": "Не удалось сохранить код верификации" })),
-        )
-    })?;
-
-    send_verification_email(&clean_email, &code).await.map_err(|err_msg| {
-        eprintln!("[SIGNAL AUTH] Ошибка отправки письма на {}: {}", clean_email, err_msg);
-        (
-            StatusCode::BAD_GATEWAY,
-            Json(json!({ 
-                "error": "Не удалось отправить письмо с кодом. Убедитесь в правильности email или настройте отправку писем на сервере." 
-            })),
-        )
-    })?;
-
-    Ok(Json(json!({
-        "success": true,
-        "email": clean_email,
-        "message": "Код подтверждения отправлен на вашу почту",
-        "expires_in": 900
-    })))
-}
-
-pub async fn resend_verification_code(
-    State(state): State<AppState>,
-    Json(payload): Json<ResendCodeRequest>,
-) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let clean_email = match validate_email(&payload.email) {
-        Ok(e) => e,
-        Err(err) => return Err((StatusCode::BAD_REQUEST, Json(json!({ "error": err })))),
-    };
-
-    let record = sqlx::query("SELECT username, password_hash, created_at FROM email_verifications WHERE email = ?")
-        .bind(&clean_email)
-        .fetch_optional(&state.pool)
-        .await
-        .map_err(|_| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "error": "Ошибка базы данных" })),
-            )
-        })?;
-
-    let row = match record {
-        Some(r) => r,
-        None => {
-            return Err((
-                StatusCode::NOT_FOUND,
-                Json(json!({ "error": "Сессия верификации не найдена. Начните регистрацию заново." })),
-            ))
-        }
-    };
-
-    let now = chrono::Utc::now().timestamp();
-    let created_at: i64 = row.get("created_at");
-    if (now - created_at) < 30 {
-        return Err((
-            StatusCode::TOO_MANY_REQUESTS,
-            Json(json!({ "error": "Пожалуйста, подождите перед повторной отправкой кода" })),
-        ));
-    }
-
-    let code = format!("{:06}", fastrand::u32(100000..=999999));
-    let expires_at = now + 900;
-
-    sqlx::query("UPDATE email_verifications SET code = ?, expires_at = ?, created_at = ?, attempts = 0 WHERE email = ?")
-        .bind(&code)
-        .bind(expires_at)
-        .bind(now)
-        .bind(&clean_email)
-        .execute(&state.pool)
-        .await
-        .map_err(|_| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "error": "Не удалось обновить код" })),
-            )
-        })?;
-
-    send_verification_email(&clean_email, &code).await.map_err(|err_msg| {
-        eprintln!("[SIGNAL AUTH] Ошибка повторной отправки письма на {}: {}", clean_email, err_msg);
-        (
-            StatusCode::BAD_GATEWAY,
-            Json(json!({ "error": "Не удалось отправить письмо с кодом. Попробуйте позже." })),
-        )
-    })?;
-
-    Ok(Json(json!({
-        "success": true,
-        "message": "Новый код подтверждения отправлен на email",
-        "expires_in": 900
-    })))
-}
-
-pub async fn verify_registration_code(
-    State(state): State<AppState>,
-    Json(payload): Json<VerifyCodeRequest>,
-) -> Result<Json<AuthResponse>, (StatusCode, Json<Value>)> {
-    let clean_email = match validate_email(&payload.email) {
-        Ok(e) => e,
-        Err(err) => return Err((StatusCode::BAD_REQUEST, Json(json!({ "error": err })))),
-    };
-
-    let submitted_code = payload.code.trim();
-    if submitted_code.len() != 6 || !submitted_code.chars().all(|c| c.is_ascii_digit()) {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(json!({ "error": "Код подтверждения должен состоять из 6 цифр" })),
-        ));
-    }
-
-    let record = sqlx::query(
-        "SELECT code, username, password_hash, expires_at, attempts FROM email_verifications WHERE email = ?",
-    )
-    .bind(&clean_email)
-    .fetch_optional(&state.pool)
-    .await
-    .map_err(|_| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "error": "Ошибка базы данных" })),
-        )
-    })?;
-
-    let row = match record {
-        Some(r) => r,
-        None => {
-            return Err((
-                StatusCode::NOT_FOUND,
-                Json(json!({ "error": "Код подтверждения не найден или истек. Запросите регистрацию заново." })),
-            ))
-        }
-    };
-
-    let db_code: String = row.get("code");
-    let username: String = row.get("username");
-    let password_hash: String = row.get("password_hash");
-    let expires_at: i64 = row.get("expires_at");
-    let attempts: i64 = row.get("attempts");
-
-    let now = chrono::Utc::now().timestamp();
-    if now > expires_at {
-        let _ = sqlx::query("DELETE FROM email_verifications WHERE email = ?")
-            .bind(&clean_email)
-            .execute(&state.pool)
-            .await;
-
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(json!({ "error": "Срок действия кода истек. Запросите новый код." })),
-        ));
-    }
-
-    if attempts >= 5 {
-        let _ = sqlx::query("DELETE FROM email_verifications WHERE email = ?")
-            .bind(&clean_email)
-            .execute(&state.pool)
-            .await;
-
-        return Err((
-            StatusCode::TOO_MANY_REQUESTS,
-            Json(json!({ "error": "Превышено количество попыток ввода. Запросите новый код." })),
-        ));
-    }
-
-    if db_code != submitted_code {
-        let _ = sqlx::query("UPDATE email_verifications SET attempts = attempts + 1 WHERE email = ?")
-            .bind(&clean_email)
-            .execute(&state.pool)
-            .await;
-
-        let left = 4 - attempts;
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(json!({
-                "error": format!("Неверный код подтверждения. Осталось попыток: {}", if left > 0 { left } else { 0 })
-            })),
-        ));
-    }
-
-    let user_id = Uuid::new_v4().to_string();
-    let created_at = now;
-
-    sqlx::query(
-        "INSERT INTO users (id, username, email, password_hash, created_at) VALUES (?, ?, ?, ?, ?)",
-    )
-    .bind(&user_id)
-    .bind(&username)
-    .bind(&clean_email)
-    .bind(&password_hash)
-    .bind(created_at)
-    .execute(&state.pool)
-    .await
-    .map_err(|_| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "error": "Не удалось зарегистрировать пользователя" })),
-        )
-    })?;
-
-    let _ = sqlx::query("DELETE FROM email_verifications WHERE email = ?")
-        .bind(&clean_email)
-        .execute(&state.pool)
-        .await;
-
-    let token = create_jwt(&user_id, &username, Some(&clean_email)).map_err(|_| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "error": "Не удалось сгенерировать токен авторизации" })),
-        )
-    })?;
-
-    Ok(Json(AuthResponse {
-        token,
-        user: UserInfo {
-            id: user_id,
-            username,
-            email: Some(clean_email),
-        },
-    }))
-}
 
 pub async fn register(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(payload): Json<RegisterRequest>,
 ) -> Result<Json<AuthResponse>, (StatusCode, Json<Value>)> {
+    let ip = headers
+        .get("x-forwarded-for")
+        .or_else(|| headers.get("x-real-ip"))
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("unknown")
+        .split(',')
+        .next()
+        .unwrap_or("unknown")
+        .trim()
+        .to_string();
+
+    // Защита от спам-регистраций и Bcrypt DoS: не более 5 регистраций за 10 минут с одного IP
+    {
+        let mut attempts = state.login_attempts.lock().unwrap_or_else(|e| e.into_inner());
+        let now = Instant::now();
+        let window = Duration::from_secs(600); // 10 минут
+
+        if attempts.len() > 1000 {
+            attempts.retain(|_, (_, start)| now.duration_since(*start) <= window);
+        }
+
+        let reg_entry = attempts.entry(format!("reg:{}", ip)).or_insert((0, now));
+        if now.duration_since(reg_entry.1) > window {
+            *reg_entry = (1, now);
+        } else {
+            reg_entry.0 += 1;
+            if reg_entry.0 > 5 {
+                return Err((
+                    StatusCode::TOO_MANY_REQUESTS,
+                    Json(json!({ "error": "Слишком много попыток регистрации. Подождите 10 минут." })),
+                ));
+            }
+        }
+    }
+
     if let Err(err) = validate_username(&payload.username) {
         return Err((StatusCode::BAD_REQUEST, Json(json!({ "error": err }))));
     }
@@ -343,14 +62,6 @@ pub async fn register(
     if let Err(err) = validate_password(&payload.password) {
         return Err((StatusCode::BAD_REQUEST, Json(json!({ "error": err }))));
     }
-
-    let clean_email = match &payload.email {
-        Some(e) if !e.trim().is_empty() => match validate_email(e) {
-            Ok(valid) => Some(valid),
-            Err(err) => return Err((StatusCode::BAD_REQUEST, Json(json!({ "error": err })))),
-        },
-        _ => None,
-    };
 
     let exists = sqlx::query("SELECT id FROM users WHERE LOWER(username) = LOWER(?)")
         .bind(&clean_username)
@@ -370,26 +81,6 @@ pub async fn register(
         ));
     }
 
-    if let Some(ref email) = clean_email {
-        let email_exists = sqlx::query("SELECT id FROM users WHERE LOWER(email) = LOWER(?)")
-            .bind(email)
-            .fetch_optional(&state.pool)
-            .await
-            .map_err(|_| {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({ "error": "Ошибка базы данных" })),
-                )
-            })?;
-
-        if email_exists.is_some() {
-            return Err((
-                StatusCode::CONFLICT,
-                Json(json!({ "error": "Пользователь с такой почтой уже существует" })),
-            ));
-        }
-    }
-
     let password_hash = hash_password(payload.password.trim()).map_err(|_| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -401,11 +92,10 @@ pub async fn register(
     let now = chrono::Utc::now().timestamp();
 
     sqlx::query(
-        "INSERT INTO users (id, username, email, password_hash, created_at) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO users (id, username, password_hash, created_at) VALUES (?, ?, ?, ?)",
     )
     .bind(&user_id)
     .bind(&clean_username)
-    .bind(&clean_email)
     .bind(&password_hash)
     .bind(now)
     .execute(&state.pool)
@@ -418,7 +108,7 @@ pub async fn register(
         )
     })?;
 
-    let token = create_jwt(&user_id, &clean_username, clean_email.as_deref()).map_err(|_| {
+    let token = create_jwt(&user_id, &clean_username).map_err(|_| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "error": "Не удалось сгенерировать токен авторизации" })),
@@ -430,7 +120,8 @@ pub async fn register(
         user: UserInfo {
             id: user_id,
             username: clean_username,
-            email: clean_email,
+            email: None,
+            avatar_url: None,
         },
     }))
 }
@@ -440,36 +131,46 @@ pub async fn login(
     headers: HeaderMap,
     Json(payload): Json<LoginRequest>,
 ) -> Result<Json<AuthResponse>, (StatusCode, Json<Value>)> {
-    // Rate-limit: не более 10 попыток за 5 минут с одного IP+логина
-    let rate_key = {
-        let ip = headers
-            .get("x-forwarded-for")
-            .or_else(|| headers.get("x-real-ip"))
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("unknown")
-            .split(',')
-            .next()
-            .unwrap_or("unknown")
-            .trim()
-            .to_string();
-        format!("{}:{}", ip, payload.login.trim().to_lowercase())
-    };
+    let clean_login = payload.login.trim().to_lowercase();
+    let ip = headers
+        .get("x-forwarded-for")
+        .or_else(|| headers.get("x-real-ip"))
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("unknown")
+        .split(',')
+        .next()
+        .unwrap_or("unknown")
+        .trim()
+        .to_string();
 
+    // Проверка лимитов попыток входа
     {
         let mut attempts = state.login_attempts.lock().unwrap_or_else(|e| e.into_inner());
         let now = Instant::now();
-        let window = std::time::Duration::from_secs(300); // 5 минут
-        let max_attempts = 10u32;
+        let window = Duration::from_secs(300); // 5 минут
 
-        let entry = attempts.entry(rate_key.clone()).or_insert((0, now));
-        if now.duration_since(entry.1) > window {
-            *entry = (1, now); // сброс окна
-        } else {
-            entry.0 += 1;
-            if entry.0 > max_attempts {
+        if attempts.len() > 1000 {
+            attempts.retain(|_, (_, start)| now.duration_since(*start) <= window);
+        }
+
+        // Не более 5 попыток на один логин
+        if !clean_login.is_empty() {
+            if let Some(acct_entry) = attempts.get(&format!("acct:{}", clean_login)) {
+                if now.duration_since(acct_entry.1) <= window && acct_entry.0 >= 5 {
+                    return Err((
+                        StatusCode::TOO_MANY_REQUESTS,
+                        Json(json!({ "error": "Слишком много неудачных попыток входа для этого логина. Подождите 5 минут." })),
+                    ));
+                }
+            }
+        }
+
+        // Не более 20 попыток с одного IP
+        if let Some(ip_entry) = attempts.get(&format!("ip:{}", ip)) {
+            if now.duration_since(ip_entry.1) <= window && ip_entry.0 >= 20 {
                 return Err((
                     StatusCode::TOO_MANY_REQUESTS,
-                    Json(json!({ "error": "Слишком много попыток входа. Подождите 5 минут." })),
+                    Json(json!({ "error": "Слишком много запросов с вашего IP. Подождите 5 минут." })),
                 ));
             }
         }
@@ -481,7 +182,7 @@ pub async fn login(
     if login.is_empty() {
         return Err((
             StatusCode::BAD_REQUEST,
-            Json(json!({ "error": "Введите логин или email" })),
+            Json(json!({ "error": "Введите имя пользователя" })),
         ));
     }
 
@@ -492,8 +193,7 @@ pub async fn login(
         ));
     }
 
-    let row = sqlx::query("SELECT id, username, email, password_hash FROM users WHERE LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?)")
-        .bind(login)
+    let row = sqlx::query("SELECT id, username, password_hash, email, avatar_url FROM users WHERE LOWER(username) = LOWER(?)")
         .bind(login)
         .fetch_optional(&state.pool)
         .await
@@ -504,254 +204,76 @@ pub async fn login(
             )
         })?;
 
+    let record_attempt = || {
+        let mut attempts = state.login_attempts.lock().unwrap_or_else(|e| e.into_inner());
+        let now = Instant::now();
+        let window = Duration::from_secs(300);
+
+        if !clean_login.is_empty() {
+            let entry = attempts.entry(format!("acct:{}", clean_login)).or_insert((0, now));
+            if now.duration_since(entry.1) > window {
+                *entry = (1, now);
+            } else {
+                entry.0 += 1;
+            }
+        }
+
+        let ip_entry = attempts.entry(format!("ip:{}", ip)).or_insert((0, now));
+        if now.duration_since(ip_entry.1) > window {
+            *ip_entry = (1, now);
+        } else {
+            ip_entry.0 += 1;
+        }
+    };
+
     let user_row = match row {
         Some(r) => r,
         None => {
+            record_attempt();
+            tokio::time::sleep(Duration::from_millis(150)).await;
             return Err((
                 StatusCode::UNAUTHORIZED,
-                Json(json!({ "error": "Неверный логин/email или пароль" })),
-            ))
+                Json(json!({ "error": "Неверное имя пользователя или пароль" })),
+            ));
         }
     };
 
     let user_id: String = user_row.get("id");
     let db_username: String = user_row.get("username");
-    let db_email: Option<String> = user_row.get("email");
     let password_hash: String = user_row.get("password_hash");
 
     if !verify_password(password, &password_hash) {
+        record_attempt();
+        tokio::time::sleep(Duration::from_millis(150)).await;
         return Err((
             StatusCode::UNAUTHORIZED,
-            Json(json!({ "error": "Неверный логин/email или пароль" })),
+            Json(json!({ "error": "Неверное имя пользователя или пароль" })),
         ));
     }
 
-    // Успешный вход — сбрасываем счётчик попыток
+    // Успешный вход — сбрасываем счётчик неудачных попыток для данного аккаунта
     {
         let mut attempts = state.login_attempts.lock().unwrap_or_else(|e| e.into_inner());
-        attempts.remove(&rate_key);
+        attempts.remove(&format!("acct:{}", clean_login));
     }
 
-    let token = create_jwt(&user_id, &db_username, db_email.as_deref()).map_err(|_| {
+    let token = create_jwt(&user_id, &db_username).map_err(|_| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "error": "Не удалось сгенерировать токен авторизации" })),
         )
     })?;
+
+    let user_email: Option<String> = user_row.get("email");
+    let user_avatar: Option<String> = user_row.get("avatar_url");
 
     Ok(Json(AuthResponse {
         token,
         user: UserInfo {
             id: user_id,
             username: db_username,
-            email: db_email,
-        },
-    }))
-}
-
-pub async fn request_password_reset(
-    State(state): State<AppState>,
-    Json(payload): Json<ResetPasswordRequest>,
-) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
-    let clean_input = payload.email_or_login.trim().to_lowercase();
-    if clean_input.is_empty() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(json!({ "error": "Введите логин или email" })),
-        ));
-    }
-
-    let user_row = sqlx::query("SELECT id, username, email FROM users WHERE LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?)")
-        .bind(&clean_input)
-        .bind(&clean_input)
-        .fetch_optional(&state.pool)
-        .await
-        .map_err(|_| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "error": "Ошибка базы данных" })),
-            )
-        })?;
-
-    let row = match user_row {
-        Some(r) => r,
-        None => {
-            return Err((
-                StatusCode::NOT_FOUND,
-                Json(json!({ "error": "Пользователь с таким логином или email не найден" })),
-            ));
-        }
-    };
-
-    let user_id: String = row.get("id");
-    let email: Option<String> = row.get("email");
-    let target_email = match email {
-        Some(e) if !e.trim().is_empty() => e,
-        _ => {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                Json(json!({ "error": "К этому аккаунту не привязан email для сброса пароля" })),
-            ));
-        }
-    };
-
-    let code = format!("{:06}", fastrand::u32(100000..=999999));
-    let now = chrono::Utc::now().timestamp();
-    let expires_at = now + 900;
-
-    sqlx::query(
-        r#"
-        INSERT INTO password_resets (email, code, user_id, expires_at, created_at, attempts)
-        VALUES (?, ?, ?, ?, ?, 0)
-        ON CONFLICT(email) DO UPDATE SET
-            code = excluded.code,
-            user_id = excluded.user_id,
-            expires_at = excluded.expires_at,
-            created_at = excluded.created_at,
-            attempts = 0
-        "#,
-    )
-    .bind(&target_email)
-    .bind(&code)
-    .bind(&user_id)
-    .bind(expires_at)
-    .bind(now)
-    .execute(&state.pool)
-    .await
-    .map_err(|_| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "error": "Не удалось создать код сброса" })),
-        )
-    })?;
-
-    send_verification_email(&target_email, &code).await.map_err(|err_msg| {
-        eprintln!("[SIGNAL AUTH] Ошибка отправки кода сброса на {}: {}", target_email, err_msg);
-        (
-            StatusCode::BAD_GATEWAY,
-            Json(json!({ "error": "Не удалось отправить письмо с кодом сброса. Попробуйте позже." })),
-        )
-    })?;
-
-    Ok(Json(json!({
-        "success": true,
-        "email": target_email,
-        "message": "Код для сброса пароля отправлен на вашу почту",
-        "expires_in": 900
-    })))
-}
-
-pub async fn confirm_password_reset(
-    State(state): State<AppState>,
-    Json(payload): Json<ConfirmResetPasswordRequest>,
-) -> Result<Json<AuthResponse>, (StatusCode, Json<Value>)> {
-    let clean_input = payload.email_or_login.trim().to_lowercase();
-    let code = payload.code.trim();
-    let new_password = payload.new_password.trim();
-
-    if let Err(err) = validate_password(new_password) {
-        return Err((StatusCode::BAD_REQUEST, Json(json!({ "error": err }))));
-    }
-
-    let reset_record = sqlx::query(
-        r#"
-        SELECT pr.email, pr.code, pr.user_id, pr.expires_at, pr.attempts, u.username, u.email as u_email
-        FROM password_resets pr
-        JOIN users u ON u.id = pr.user_id
-        WHERE LOWER(pr.email) = LOWER(?) OR LOWER(u.username) = LOWER(?)
-        "#
-    )
-    .bind(&clean_input)
-    .bind(&clean_input)
-    .fetch_optional(&state.pool)
-    .await
-    .map_err(|_| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "error": "Ошибка базы данных" })),
-        )
-    })?;
-
-    let row = match reset_record {
-        Some(r) => r,
-        None => {
-            return Err((
-                StatusCode::NOT_FOUND,
-                Json(json!({ "error": "Код сброса пароля не найден или устарел. Запросите сброс заново." })),
-            ));
-        }
-    };
-
-    let db_email: String = row.get("email");
-    let db_code: String = row.get("code");
-    let user_id: String = row.get("user_id");
-    let username: String = row.get("username");
-    let u_email: Option<String> = row.get("u_email");
-    let expires_at: i64 = row.get("expires_at");
-    let attempts: i64 = row.get("attempts");
-
-    let now = chrono::Utc::now().timestamp();
-    if now > expires_at {
-        let _ = sqlx::query("DELETE FROM password_resets WHERE email = ?").bind(&db_email).execute(&state.pool).await;
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(json!({ "error": "Срок действия кода истек. Запросите новый код." })),
-        ));
-    }
-
-    if attempts >= 5 {
-        let _ = sqlx::query("DELETE FROM password_resets WHERE email = ?").bind(&db_email).execute(&state.pool).await;
-        return Err((
-            StatusCode::TOO_MANY_REQUESTS,
-            Json(json!({ "error": "Превышено число попыток ввода. Запросите сброс заново." })),
-        ));
-    }
-
-    if db_code != code {
-        let _ = sqlx::query("UPDATE password_resets SET attempts = attempts + 1 WHERE email = ?").bind(&db_email).execute(&state.pool).await;
-        let left = 4 - attempts;
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(json!({
-                "error": format!("Неверный код подтверждения. Осталось попыток: {}", if left > 0 { left } else { 0 })
-            })),
-        ));
-    }
-
-    let password_hash = hash_password(new_password).map_err(|_| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "error": "Не удалось обновить пароль" })),
-        )
-    })?;
-
-    sqlx::query("UPDATE users SET password_hash = ? WHERE id = ?")
-        .bind(&password_hash)
-        .bind(&user_id)
-        .execute(&state.pool)
-        .await
-        .map_err(|_| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "error": "Не удалось сохранить новый пароль" })),
-            )
-        })?;
-
-    let _ = sqlx::query("DELETE FROM password_resets WHERE email = ?").bind(&db_email).execute(&state.pool).await;
-
-    let token = create_jwt(&user_id, &username, u_email.as_deref()).map_err(|_| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "error": "Не удалось сгенерировать токен авторизации" })),
-        )
-    })?;
-
-    Ok(Json(AuthResponse {
-        token,
-        user: UserInfo {
-            id: user_id,
-            username,
-            email: u_email,
+            email: user_email,
+            avatar_url: user_avatar,
         },
     }))
 }
@@ -764,7 +286,7 @@ pub async fn get_me(
         (code, Json(json!({ "error": msg })))
     })?;
 
-    let row = sqlx::query("SELECT id, username, email FROM users WHERE id = ?")
+    let row = sqlx::query("SELECT id, username, email, avatar_url FROM users WHERE id = ?")
         .bind(&claims.sub)
         .fetch_optional(&state.pool)
         .await
@@ -780,11 +302,365 @@ pub async fn get_me(
             let id: String = r.get("id");
             let username: String = r.get("username");
             let email: Option<String> = r.get("email");
-            Ok(Json(UserInfo { id, username, email }))
+            let avatar_url: Option<String> = r.get("avatar_url");
+            Ok(Json(UserInfo { id, username, email, avatar_url }))
         }
         None => Err((
             StatusCode::NOT_FOUND,
             Json(json!({ "error": "Пользователь не найден" })),
         )),
     }
+}
+
+pub async fn get_auth_config() -> Json<AuthConfigResponse> {
+    let client_id = std::env::var("GOOGLE_CLIENT_ID")
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    let enabled = client_id.is_some();
+    Json(AuthConfigResponse {
+        google_client_id: client_id,
+        google_auth_enabled: enabled,
+    })
+}
+
+#[derive(Debug, Deserialize)]
+struct GoogleTokenInfo {
+    iss: String,
+    sub: String,
+    aud: String,
+    email: Option<String>,
+    #[serde(default)]
+    email_verified: Option<Value>,
+    name: Option<String>,
+    picture: Option<String>,
+    exp: Option<Value>,
+}
+
+pub async fn google_login(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<GoogleAuthRequest>,
+) -> Result<Json<AuthResponse>, (StatusCode, Json<Value>)> {
+    let ip = headers
+        .get("x-forwarded-for")
+        .or_else(|| headers.get("x-real-ip"))
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("unknown")
+        .split(',')
+        .next()
+        .unwrap_or("unknown")
+        .trim()
+        .to_string();
+
+    // Защита от спама запросов к Google
+    {
+        let mut attempts = state.login_attempts.lock().unwrap_or_else(|e| e.into_inner());
+        let now = Instant::now();
+        let window = Duration::from_secs(300);
+
+        if attempts.len() > 1000 {
+            attempts.retain(|_, (_, start)| now.duration_since(*start) <= window);
+        }
+
+        let ip_entry = attempts.entry(format!("g_ip:{}", ip)).or_insert((0, now));
+        if now.duration_since(ip_entry.1) > window {
+            *ip_entry = (1, now);
+        } else {
+            ip_entry.0 += 1;
+            if ip_entry.0 > 20 {
+                return Err((
+                    StatusCode::TOO_MANY_REQUESTS,
+                    Json(json!({ "error": "Слишком много попыток входа через Google. Подождите 5 минут." })),
+                ));
+            }
+        }
+    }
+
+    let cred = payload.credential.trim();
+    if cred.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "error": "Отсутствует Google токен (credential)" })),
+        ));
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(8))
+        .build()
+        .map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": "Ошибка инициализации HTTP-клиента" })),
+            )
+        })?;
+
+    let resp = client
+        .get("https://oauth2.googleapis.com/tokeninfo")
+        .query(&[("id_token", cred)])
+        .send()
+        .await
+        .map_err(|e| {
+            eprintln!("[SIGNAL GOOGLE AUTH] Ошибка сети при обращении к Google: {}", e);
+            (
+                StatusCode::BAD_GATEWAY,
+                Json(json!({ "error": "Не удалось связаться с серверами Google для проверки подлинности" })),
+            )
+        })?;
+
+    if !resp.status().is_success() {
+        eprintln!("[SIGNAL GOOGLE AUTH] Токен не прошел проверку Google: статус {}", resp.status());
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            Json(json!({ "error": "Недействительный или просроченный токен Google" })),
+        ));
+    }
+
+    let info: GoogleTokenInfo = resp.json().await.map_err(|e| {
+        eprintln!("[SIGNAL GOOGLE AUTH] Ошибка десериализации ответа Google: {}", e);
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": "Ошибка обработки ответа Google" })),
+        )
+    })?;
+
+    // Проверка издателя (issuer)
+    if info.iss != "https://accounts.google.com" && info.iss != "accounts.google.com" {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            Json(json!({ "error": "Неверный издатель токена Google (iss)" })),
+        ));
+    }
+
+    // Проверка Client ID (если настроен в ENV)
+    if let Ok(expected_client_id) = std::env::var("GOOGLE_CLIENT_ID") {
+        let expected = expected_client_id.trim();
+        if !expected.is_empty() && info.aud != expected {
+            eprintln!("[SIGNAL GOOGLE AUTH] Aud mismatch: expected '{}', got '{}'", expected, info.aud);
+            return Err((
+                StatusCode::UNAUTHORIZED,
+                Json(json!({ "error": "Токен выдан для другого Client ID" })),
+            ));
+        }
+    }
+
+    // Проверка срока действия
+    let exp_timestamp = match &info.exp {
+        Some(Value::Number(n)) => n.as_i64(),
+        Some(Value::String(s)) => s.parse::<i64>().ok(),
+        _ => None,
+    };
+    if let Some(exp) = exp_timestamp {
+        if chrono::Utc::now().timestamp() >= exp {
+            return Err((
+                StatusCode::UNAUTHORIZED,
+                Json(json!({ "error": "Срок действия токена Google истёк" })),
+            ));
+        }
+    }
+
+    // Проверка подтверждения почты
+    let email_verified = match &info.email_verified {
+        Some(Value::Bool(b)) => *b,
+        Some(Value::String(s)) => s.eq_ignore_ascii_case("true"),
+        _ => false,
+    };
+    if !email_verified {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({ "error": "Email вашего Google-аккаунта не подтверждён" })),
+        ));
+    }
+
+    let google_id = info.sub.trim().to_string();
+    let email_opt = info.email.as_ref().map(|e| e.trim().to_lowercase()).filter(|e| !e.is_empty());
+    let avatar_opt = info.picture.as_ref().map(|p| p.trim().to_string()).filter(|p| !p.is_empty());
+
+    // 1. Поиск по google_id
+    let user_by_google = sqlx::query("SELECT id, username, email, avatar_url FROM users WHERE google_id = ?")
+        .bind(&google_id)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(|e| {
+            eprintln!("[SIGNAL GOOGLE AUTH] DB error: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Ошибка базы данных" })))
+        })?;
+
+    if let Some(row) = user_by_google {
+        let user_id: String = row.get("id");
+        let username: String = row.get("username");
+        let current_email: Option<String> = row.get("email");
+        let current_avatar: Option<String> = row.get("avatar_url");
+
+        // Обновим аватар/email при необходимости
+        if (avatar_opt.is_some() && current_avatar != avatar_opt) || (email_opt.is_some() && current_email != email_opt) {
+            let _ = sqlx::query("UPDATE users SET avatar_url = COALESCE(?, avatar_url), email = COALESCE(?, email) WHERE id = ?")
+                .bind(&avatar_opt)
+                .bind(&email_opt)
+                .bind(&user_id)
+                .execute(&state.pool)
+                .await;
+        }
+
+        let token = create_jwt(&user_id, &username).map_err(|_| {
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Ошибка генерации токена" })))
+        })?;
+
+        return Ok(Json(AuthResponse {
+            token,
+            user: UserInfo {
+                id: user_id,
+                username,
+                email: email_opt.or(current_email),
+                avatar_url: avatar_opt.or(current_avatar),
+            },
+        }));
+    }
+
+    // 2. Если по google_id не найден, но есть подтверждённый email — проверяем привязку
+    if let Some(ref email) = email_opt {
+        let user_by_email = sqlx::query("SELECT id, username, email, avatar_url, google_id FROM users WHERE LOWER(email) = LOWER(?)")
+            .bind(email)
+            .fetch_optional(&state.pool)
+            .await
+            .map_err(|e| {
+                eprintln!("[SIGNAL GOOGLE AUTH] DB error: {}", e);
+                (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Ошибка базы данных" })))
+            })?;
+
+        if let Some(row) = user_by_email {
+            let existing_google_id: Option<String> = row.get("google_id");
+            if let Some(ref gid) = existing_google_id {
+                if gid != &google_id {
+                    return Err((
+                        StatusCode::CONFLICT,
+                        Json(json!({ "error": "Этот email уже привязан к другому Google-аккаунту" })),
+                    ));
+                }
+            }
+
+            let user_id: String = row.get("id");
+            let username: String = row.get("username");
+            let current_avatar: Option<String> = row.get("avatar_url");
+
+            let _ = sqlx::query("UPDATE users SET google_id = ?, avatar_url = COALESCE(avatar_url, ?) WHERE id = ?")
+                .bind(&google_id)
+                .bind(&avatar_opt)
+                .bind(&user_id)
+                .execute(&state.pool)
+                .await;
+
+            let token = create_jwt(&user_id, &username).map_err(|_| {
+                (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Ошибка генерации токена" })))
+            })?;
+
+            return Ok(Json(AuthResponse {
+                token,
+                user: UserInfo {
+                    id: user_id,
+                    username,
+                    email: Some(email.clone()),
+                    avatar_url: avatar_opt.or(current_avatar),
+                },
+            }));
+        }
+    }
+
+    // 3. Пользователь новый — генерируем красивое и уникальное имя пользователя
+    let base_name = if let Some(ref name) = info.name {
+        let cleaned: String = name
+            .chars()
+            .map(|c| if c.is_ascii_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
+            .collect();
+        let trimmed = cleaned.trim_matches('_');
+        if trimmed.len() >= 3 {
+            trimmed[..trimmed.len().min(20)].to_string()
+        } else {
+            String::new()
+        }
+    } else {
+        String::new()
+    };
+
+    let base_name = if base_name.is_empty() {
+        if let Some(ref email) = email_opt {
+            let prefix = email.split('@').next().unwrap_or("user");
+            let cleaned: String = prefix
+                .chars()
+                .map(|c| if c.is_ascii_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
+                .collect();
+            let trimmed = cleaned.trim_matches('_');
+            if trimmed.len() >= 3 {
+                trimmed[..trimmed.len().min(20)].to_string()
+            } else {
+                format!("user_{}", &google_id[..6.min(google_id.len())])
+            }
+        } else {
+            format!("user_{}", &google_id[..6.min(google_id.len())])
+        }
+    } else {
+        base_name
+    };
+
+    // Подбираем свободное имя пользователя
+    let mut chosen_username = base_name.clone();
+    let mut counter = 1;
+    loop {
+        let exists = sqlx::query("SELECT id FROM users WHERE LOWER(username) = LOWER(?)")
+            .bind(&chosen_username)
+            .fetch_optional(&state.pool)
+            .await
+            .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Ошибка базы данных" }))))?;
+
+        if exists.is_none() {
+            break;
+        }
+
+        chosen_username = format!("{}_{}", &base_name[..base_name.len().min(16)], counter);
+        counter += 1;
+        if counter > 100 {
+            chosen_username = format!("user_{}", &Uuid::new_v4().to_string()[..8]);
+            break;
+        }
+    }
+
+    // Создаём надёжный случайный пароль для SQLite NOT NULL
+    let random_pass = format!("goog_{}_{}", Uuid::new_v4(), fastrand::u64(..));
+    let password_hash = hash_password(&random_pass).map_err(|_| {
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Не удалось сгенерировать хэш" })))
+    })?;
+
+    let user_id = Uuid::new_v4().to_string();
+    let now = chrono::Utc::now().timestamp();
+
+    sqlx::query(
+        "INSERT INTO users (id, username, password_hash, google_id, email, avatar_url, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(&user_id)
+    .bind(&chosen_username)
+    .bind(&password_hash)
+    .bind(&google_id)
+    .bind(&email_opt)
+    .bind(&avatar_opt)
+    .bind(now)
+    .execute(&state.pool)
+    .await
+    .map_err(|e| {
+        eprintln!("[SIGNAL GOOGLE AUTH] Insert error: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Не удалось создать аккаунт Google" })))
+    })?;
+
+    let token = create_jwt(&user_id, &chosen_username).map_err(|_| {
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Не удалось сгенерировать токен" })))
+    })?;
+
+    Ok(Json(AuthResponse {
+        token,
+        user: UserInfo {
+            id: user_id,
+            username: chosen_username,
+            email: email_opt,
+            avatar_url: avatar_opt,
+        },
+    }))
 }

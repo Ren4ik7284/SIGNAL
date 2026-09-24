@@ -6,28 +6,13 @@ use serde::{Deserialize, Serialize};
 pub struct Claims {
     pub sub: String,
     pub username: String,
-    pub email: Option<String>,
     pub exp: usize,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct SendCodeRequest {
-    pub email: String,
-    pub username: String,
-    pub password: String,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct RegisterRequest {
     pub username: String,
     pub password: String,
-    pub email: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct VerifyCodeRequest {
-    pub email: String,
-    pub code: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -36,23 +21,25 @@ pub struct LoginRequest {
     pub password: String,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct ResetPasswordRequest {
-    pub email_or_login: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct ConfirmResetPasswordRequest {
-    pub email_or_login: String,
-    pub code: String,
-    pub new_password: String,
-}
-
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UserInfo {
     pub id: String,
     pub username: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avatar_url: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GoogleAuthRequest {
+    pub credential: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AuthConfigResponse {
+    pub google_client_id: Option<String>,
+    pub google_auth_enabled: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -61,13 +48,28 @@ pub struct AuthResponse {
     pub user: UserInfo,
 }
 
-fn get_jwt_secret() -> Vec<u8> {
-    std::env::var("JWT_SECRET")
-        .unwrap_or_else(|_| "signal-secret-jwt-key-2026".to_string())
-        .into_bytes()
+static DYNAMIC_JWT_SECRET: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
+
+fn get_jwt_secret() -> &'static [u8] {
+    DYNAMIC_JWT_SECRET.get_or_init(|| {
+        if let Ok(val) = std::env::var("JWT_SECRET") {
+            let trimmed = val.trim();
+            if !trimmed.is_empty() {
+                return trimmed.as_bytes().to_vec();
+            }
+        }
+        let random_secret: String = (0..32)
+            .map(|_| {
+                const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()-_=+";
+                CHARSET[fastrand::usize(..CHARSET.len())] as char
+            })
+            .collect();
+        eprintln!("[SIGNAL SECURITY] JWT_SECRET не задан в ENV — сгенерирован случайный криптостойкий ключ сессии.");
+        random_secret.into_bytes()
+    })
 }
 
-pub fn create_jwt(user_id: &str, username: &str, email: Option<&str>) -> Result<String, String> {
+pub fn create_jwt(user_id: &str, username: &str) -> Result<String, String> {
     let expiration = chrono::Utc::now()
         .checked_add_signed(chrono::Duration::days(30))
         .expect("valid timestamp")
@@ -76,14 +78,13 @@ pub fn create_jwt(user_id: &str, username: &str, email: Option<&str>) -> Result<
     let claims = Claims {
         sub: user_id.to_string(),
         username: username.to_string(),
-        email: email.map(|s| s.to_string()),
         exp: expiration,
     };
 
     encode(
         &Header::default(),
         &claims,
-        &EncodingKey::from_secret(&get_jwt_secret()),
+        &EncodingKey::from_secret(get_jwt_secret()),
     )
     .map_err(|e| e.to_string())
 }
@@ -91,7 +92,7 @@ pub fn create_jwt(user_id: &str, username: &str, email: Option<&str>) -> Result<
 pub fn verify_jwt(token: &str) -> Result<Claims, String> {
     decode::<Claims>(
         token,
-        &DecodingKey::from_secret(&get_jwt_secret()),
+        &DecodingKey::from_secret(get_jwt_secret()),
         &Validation::default(),
     )
     .map(|data| data.claims)
@@ -149,35 +150,49 @@ pub fn validate_password(password: &str) -> Result<(), &'static str> {
     if trimmed.len() < 6 {
         return Err("Пароль должен содержать не менее 6 символов");
     }
-    if trimmed.len() > 128 {
-        return Err("Пароль не должен превышать 128 символов");
+    if trimmed.len() > 72 {
+        return Err("Пароль не должен превышать 72 символа");
     }
     Ok(())
 }
 
-pub fn validate_email(email: &str) -> Result<String, &'static str> {
-    let clean = email.trim().to_lowercase();
-    if clean.is_empty() {
-        return Err("Email обязателен для заполнения");
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_jwt_create_and_verify() {
+        let user_id = "test-user-uuid-123";
+        let username = "alex_smith";
+        let token = create_jwt(user_id, username).expect("JWT creation should succeed");
+        assert!(!token.is_empty());
+
+        let claims = verify_jwt(&token).expect("JWT verification should succeed");
+        assert_eq!(claims.sub, user_id);
+        assert_eq!(claims.username, username);
     }
-    if clean.contains(' ') || clean.contains('\t') || clean.contains('\n') {
-        return Err("Email не должен содержать пробелы");
+
+    #[test]
+    fn test_validate_username() {
+        assert!(validate_username("alex_123").is_ok());
+        assert!(validate_username("john-doe").is_ok());
+        assert!(validate_username("al").is_err()); // too short
+        assert!(validate_username("alex smith").is_err()); // has space
+        assert!(validate_username("alex@smith").is_err()); // invalid char
     }
-    if !email_address::EmailAddress::is_valid(&clean) {
-        return Err("Укажите корректный адрес электронной почты (например, name@example.com)");
+
+    #[test]
+    fn test_validate_password() {
+        assert!(validate_password("123456").is_ok());
+        assert!(validate_password("short").is_err());
+        assert!(validate_password("").is_err());
     }
-    let parts: Vec<&str> = clean.split('@').collect();
-    if parts.len() != 2 {
-        return Err("Некорректный формат email");
+
+    #[test]
+    fn test_password_hash_and_verify() {
+        let pass = "strong_password_99";
+        let hash = hash_password(pass).expect("Hashing should succeed");
+        assert!(verify_password(pass, &hash));
+        assert!(!verify_password("wrong_password", &hash));
     }
-    let domain = parts[1];
-    if !domain.contains('.') {
-        return Err("Email должен содержать доменную зону (например, .com, .ru)");
-    }
-    let domain_parts: Vec<&str> = domain.split('.').collect();
-    let tld = domain_parts.last().unwrap_or(&"");
-    if tld.len() < 2 || !tld.chars().all(|c| c.is_ascii_alphabetic()) {
-        return Err("Некорректная доменная зона почты");
-    }
-    Ok(clean)
 }

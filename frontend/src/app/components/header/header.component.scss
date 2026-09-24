@@ -154,7 +154,6 @@
 
         .backend-dot {
           background-color: #22c55e;
-          box-shadow: 0 0 6px rgba(34, 197, 94, 0.4);
         }
       }
     }
@@ -204,13 +203,22 @@
           width: 22px;
           height: 22px;
           border-radius: 6px;
-          background: linear-gradient(135deg, #38bdf8, #818cf8);
-          color: #000;
+          background: #27272a;
+          border: 1px solid var(--border-muted);
+          color: var(--text-primary);
           font-weight: 700;
           font-size: 11px;
           display: flex;
           align-items: center;
           justify-content: center;
+        }
+
+        .user-avatar-img {
+          width: 22px;
+          height: 22px;
+          border-radius: 6px;
+          object-fit: cover;
+          display: block;
         }
 
         .user-name-text {
@@ -235,7 +243,7 @@
         top: calc(100% + 8px);
         right: 0;
         width: 230px;
-        background-color: #12161f;
+        background-color: #18181b;
         border: 1px solid var(--border-focus);
         border-radius: 10px;
         box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6);
@@ -250,6 +258,27 @@
           border-bottom: 1px solid var(--border-subtle);
           margin-bottom: 4px;
 
+          .user-dh-user-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+          }
+
+          .user-dh-avatar {
+            width: 34px;
+            height: 34px;
+            border-radius: 8px;
+            object-fit: cover;
+            flex-shrink: 0;
+            border: 1px solid var(--border-subtle);
+          }
+
+          .user-dh-info {
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+          }
+
           .user-dh-name {
             font-weight: 700;
             font-size: 13px;
@@ -257,6 +286,15 @@
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+          }
+
+          .user-dh-email {
+            font-size: 11px;
+            color: var(--accent-green);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            margin-top: 1px;
           }
 
           .user-dh-sub {
@@ -287,22 +325,22 @@
           }
 
           &.wrapped-item {
-            color: #38bdf8;
+            color: var(--accent-green);
             font-weight: 600;
 
             .wrapped-badge {
               margin-left: auto;
               font-size: 9px;
               font-weight: 700;
-              background: rgba(56, 189, 248, 0.2);
-              border: 1px solid rgba(56, 189, 248, 0.4);
-              color: #38bdf8;
+              background: var(--accent-green-subtle);
+              border: 1px solid var(--accent-green-border);
+              color: var(--accent-green);
               padding: 1px 5px;
               border-radius: 4px;
             }
 
             &:hover {
-              background-color: rgba(56, 189, 248, 0.12);
+              background-color: var(--accent-green-subtle);
             }
           }
 

@@ -189,7 +189,6 @@
 
         .backend-dot {
           background-color: #22c55e;
-          box-shadow: 0 0 6px rgba(34, 197, 94, 0.4);
         }
       }
     }
@@ -458,21 +457,6 @@
   .sidebar-footer {
     padding-top: 10px;
     border-top: 1px solid var(--border-subtle);
-
-    .engine-meta {
-      .engine-title {
-        font-size: 10px;
-        font-family: var(--font-mono);
-        color: var(--text-secondary);
-        letter-spacing: 0.05em;
-      }
-      .engine-sub {
-        font-size: 10px;
-        font-family: var(--font-mono);
-        color: var(--text-muted);
-        margin-top: 2px;
-      }
-    }
   }
 }
 
@@ -3655,8 +3639,8 @@
       align-items: center;
       gap: 12px;
       padding: 12px;
-      background: rgba(56, 189, 248, 0.08);
-      border: 1px solid rgba(56, 189, 248, 0.25);
+      background: rgba(34, 197, 94, 0.08);
+      border: 1px solid rgba(34, 197, 94, 0.25);
       border-radius: 8px;
 
       .verify-icon-wrap {
@@ -3664,7 +3648,7 @@
         height: 38px;
         min-width: 38px;
         border-radius: 8px;
-        background: rgba(56, 189, 248, 0.15);
+        background: rgba(34, 197, 94, 0.15);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -3683,7 +3667,7 @@
 
         .verify-email-label {
           font-size: 11px;
-          color: #38bdf8;
+          color: #22c55e;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -3696,8 +3680,8 @@
       letter-spacing: 0.35em;
       text-align: center;
       font-weight: 700;
-      color: #38bdf8;
-      border-color: rgba(56, 189, 248, 0.4);
+      color: var(--text-primary);
+      border-color: var(--border-muted);
 
       &::placeholder {
         letter-spacing: 0.35em;
@@ -3706,8 +3690,7 @@
       }
 
       &:focus {
-        border-color: #38bdf8;
-        box-shadow: 0 0 10px rgba(56, 189, 248, 0.25);
+        border-color: #22c55e;
       }
     }
 
@@ -3717,6 +3700,145 @@
       justify-content: space-between;
       gap: 8px;
       padding-top: 4px;
+    }
+
+    .auth-divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 4px 0;
+
+      .auth-divider-line {
+        flex: 1;
+        height: 1px;
+        background: var(--border-subtle);
+      }
+
+      .auth-divider-text {
+        font-size: 11px;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+    }
+
+    .google-auth-section {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+
+      .google-btn-wrapper {
+        display: flex;
+        justify-content: center;
+        width: 100%;
+        min-height: 44px;
+
+        &.hidden {
+          display: none;
+        }
+
+        iframe {
+          margin: 0 auto !important;
+        }
+      }
+
+      .btn-google-auth-custom {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        width: 100%;
+        max-width: 320px;
+        height: 42px;
+        background: #18181b;
+        border: 1px solid var(--border-focus);
+        border-radius: 8px;
+        color: var(--text-primary);
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.15s ease;
+
+        &:hover {
+          background: #27272a;
+          border-color: rgba(255, 255, 255, 0.25);
+          transform: translateY(-1px);
+        }
+
+        &:active {
+          transform: translateY(0);
+        }
+
+        .google-icon {
+          flex-shrink: 0;
+        }
+      }
+
+      .google-config-panel {
+        width: 100%;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid var(--border-subtle);
+        border-radius: 8px;
+        padding: 12px;
+        font-size: 11px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+
+        .g-cfg-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+
+          .g-cfg-title {
+            font-weight: 600;
+            color: var(--text-primary);
+          }
+        }
+
+        .g-cfg-hint {
+          color: var(--text-muted);
+          font-size: 11px;
+          line-height: 1.4;
+          margin: 0;
+
+          code {
+            color: var(--accent-green);
+            background: rgba(34, 197, 94, 0.1);
+            padding: 1px 4px;
+            border-radius: 4px;
+          }
+        }
+
+        .g-cfg-input-row {
+          display: flex;
+          gap: 8px;
+
+          .g-cfg-input {
+            flex: 1;
+            font-size: 11px;
+            padding: 6px 10px;
+          }
+
+          .btn-g-cfg-save {
+            background: var(--accent-green);
+            color: #000;
+            border: none;
+            border-radius: 6px;
+            padding: 0 12px;
+            font-weight: 600;
+            font-size: 11px;
+            cursor: pointer;
+            white-space: nowrap;
+
+            &:hover {
+              opacity: 0.9;
+            }
+          }
+        }
+      }
     }
   }
 
@@ -3735,9 +3857,9 @@
   max-height: 88vh;
   display: flex;
   flex-direction: column;
-  background: radial-gradient(circle at top, #141b2b 0%, #0c0f17 100%);
-  border: 1px solid rgba(56, 189, 248, 0.3);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.8), 0 0 25px rgba(56, 189, 248, 0.15);
+  background: #111114;
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.85);
 
   .wrapped-dialog-header {
     position: relative;
@@ -3754,9 +3876,9 @@
         font-size: 11px;
         font-weight: 700;
         letter-spacing: 0.12em;
-        color: #38bdf8;
-        background: rgba(56, 189, 248, 0.15);
-        border: 1px solid rgba(56, 189, 248, 0.4);
+        color: #22c55e;
+        background: rgba(34, 197, 94, 0.12);
+        border: 1px solid rgba(34, 197, 94, 0.35);
         padding: 2px 8px;
         border-radius: 4px;
       }
@@ -3772,13 +3894,10 @@
 
     .wrapped-main-title {
       font-size: 22px;
-      font-weight: 900;
+      font-weight: 800;
       letter-spacing: -0.02em;
-      color: #fff;
+      color: var(--text-primary);
       margin: 0;
-      background: linear-gradient(135deg, #ffffff 40%, #7dd3fc 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
     }
 
     .wrapped-user-sub {
@@ -3830,8 +3949,8 @@
       .wrapped-spinner {
         width: 32px;
         height: 32px;
-        border: 2px solid rgba(56, 189, 248, 0.2);
-        border-top-color: #38bdf8;
+        border: 2px solid rgba(34, 197, 94, 0.2);
+        border-top-color: #22c55e;
         border-radius: 50%;
         animation: spin 0.8s linear infinite;
       }
@@ -3853,11 +3972,11 @@
         text-align: center;
 
         &.highlight {
-          background: rgba(56, 189, 248, 0.08);
-          border-color: rgba(56, 189, 248, 0.3);
+          background: rgba(34, 197, 94, 0.08);
+          border-color: rgba(34, 197, 94, 0.28);
 
           .w-stat-val {
-            color: #38bdf8;
+            color: #4ade80;
           }
         }
 
@@ -3876,15 +3995,15 @@
     }
 
     .w-personality-card {
-      background: linear-gradient(135deg, rgba(56, 189, 248, 0.12), rgba(129, 140, 248, 0.08));
-      border: 1px solid rgba(56, 189, 248, 0.35);
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
       border-radius: 12px;
       padding: 14px 16px;
 
       .w-personality-badge {
         font-size: 10px;
         font-weight: 800;
-        color: #38bdf8;
+        color: #22c55e;
         letter-spacing: 0.08em;
       }
 
@@ -3944,7 +4063,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            color: #38bdf8;
+            color: #22c55e;
           }
         }
 
@@ -3955,8 +4074,8 @@
           .w-rank-pill {
             font-size: 9px;
             font-weight: 800;
-            color: #f59e0b;
-            background: rgba(245, 158, 11, 0.15);
+            color: #22c55e;
+            background: rgba(34, 197, 94, 0.15);
             padding: 1px 6px;
             border-radius: 4px;
           }
@@ -3982,7 +4101,7 @@
 
           .w-hero-count {
             font-size: 11px;
-            color: #38bdf8;
+            color: #4ade80;
             margin-top: 4px;
             display: block;
           }
@@ -4065,7 +4184,7 @@
           .w-artist-rank {
             font-size: 10px;
             font-weight: 700;
-            color: #38bdf8;
+            color: #22c55e;
           }
 
           .w-artist-name {
@@ -4102,7 +4221,7 @@
             }
 
             .w-genre-pct {
-              color: #38bdf8;
+              color: #4ade80;
             }
           }
 
@@ -4114,7 +4233,7 @@
 
             .w-genre-fill {
               height: 100%;
-              background: linear-gradient(90deg, #38bdf8, #818cf8);
+              background: var(--accent-green);
               border-radius: 3px;
             }
           }

@@ -31,7 +31,7 @@
               <span class="vis-badge vis-badge-live font-mono">LIVE</span>
             }
           </div>
-          <span class="vis-artist">{{ audioService.currentTrack()?.artist || 'SIGNAL Stream Engine' }}</span>
+          <span class="vis-artist">{{ audioService.currentTrack()?.artist || 'Неизвестный исполнитель' }}</span>
         </div>
       </div>
 
@@ -68,28 +68,16 @@
         <!-- Theme Switcher -->
         <div class="vis-theme-picker font-mono">
           <button 
-            class="vis-theme-dot theme-signal" 
-            [class.active]="colorTheme() === 'signal'"
-            (click)="setColorTheme('signal')"
-            title="Тема: SIGNAL Silver"
+            class="vis-theme-dot theme-mono" 
+            [class.active]="colorTheme() === 'mono'"
+            (click)="setColorTheme('mono')"
+            title="Тема: Монохром"
           ></button>
           <button 
-            class="vis-theme-dot theme-cyan" 
-            [class.active]="colorTheme() === 'cyan'"
-            (click)="setColorTheme('cyan')"
-            title="Тема: Neon Cyan"
-          ></button>
-          <button 
-            class="vis-theme-dot theme-amber" 
-            [class.active]="colorTheme() === 'amber'"
-            (click)="setColorTheme('amber')"
-            title="Тема: Vintage Amber"
-          ></button>
-          <button 
-            class="vis-theme-dot theme-emerald" 
-            [class.active]="colorTheme() === 'emerald'"
-            (click)="setColorTheme('emerald')"
-            title="Тема: Studio Emerald"
+            class="vis-theme-dot theme-green" 
+            [class.active]="colorTheme() === 'green'"
+            (click)="setColorTheme('green')"
+            title="Тема: Зелёный акцент"
           ></button>
         </div>
 
@@ -127,7 +115,7 @@
             <img [src]="audioService.currentTrack()!.coverUrl" alt="" class="circle-cover-img" />
           } @else {
             <div class="circle-cover-placeholder font-mono">
-              SIGNAL
+              Recro
             </div>
           }
         </div>

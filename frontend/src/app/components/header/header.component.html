@@ -6,8 +6,8 @@
           <path d="M2 10v4M6 6v12M10 3v18M14 7v10M18 5v14M22 10v4"/>
         </svg>
       </span>
-      <span class="brand-title">SIGNAL</span>
-      <span class="brand-tag font-mono">01.AUDIO</span>
+      <span class="brand-title">Recro</span>
+      <span class="brand-tag font-mono">AUDIO</span>
     </div>
   </div>
 
@@ -31,7 +31,7 @@
           <button 
             class="btn-search-online-hint" 
             (click)="openOnlineSearch.emit(libraryService.searchQuery())"
-            title="Искать в глобальной сети через Rust-бэкенд"
+            title="Искать онлайн"
           >
             Искать онлайн
           </button>
@@ -47,15 +47,14 @@
   </div>
 
   <div class="header-actions">
-    <div class="backend-status-pill font-mono" [class.online]="libraryService.isBackendOnline()" title="Статус Rust бэкенда на порту 8085">
-      <span class="backend-dot"></span>
-      <span>{{ libraryService.isBackendOnline() ? 'RUST ENGINE' : 'OFFLINE' }}</span>
-    </div>
-
     @if (authService.isAuthenticated(); as isAuth) {
       <div class="user-menu-container">
         <button class="btn-user-profile font-mono" (click)="toggleUserMenu()">
-          <span class="user-avatar-badge">{{ authService.currentUser()?.username?.slice(0, 1)?.toUpperCase() }}</span>
+          @if (authService.currentUser()?.avatar_url; as avatar) {
+            <img [src]="avatar" class="user-avatar-img" alt="avatar" referrerpolicy="no-referrer" />
+          } @else {
+            <span class="user-avatar-badge">{{ authService.currentUser()?.username?.slice(0, 1)?.toUpperCase() }}</span>
+          }
           <span class="user-name-text">{{ authService.currentUser()?.username }}</span>
           <svg class="user-chevron" [class.open]="isUserMenuOpen()" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="6 9 12 15 18 9"/>
@@ -65,14 +64,25 @@
         @if (isUserMenuOpen()) {
           <div class="user-dropdown-menu" (click)="$event.stopPropagation()">
             <div class="user-dropdown-header">
-              <div class="user-dh-name">{{ authService.currentUser()?.username }}</div>
-              <div class="user-dh-sub font-mono">ID: {{ authService.currentUser()?.id?.slice(0, 8) }}...</div>
+              <div class="user-dh-user-row">
+                @if (authService.currentUser()?.avatar_url; as avatar) {
+                  <img [src]="avatar" class="user-dh-avatar" alt="avatar" referrerpolicy="no-referrer" />
+                }
+                <div class="user-dh-info">
+                  <div class="user-dh-name">{{ authService.currentUser()?.username }}</div>
+                  @if (authService.currentUser()?.email; as email) {
+                    <div class="user-dh-email font-mono">{{ email }}</div>
+                  } @else {
+                    <div class="user-dh-sub font-mono">ID: {{ authService.currentUser()?.id?.slice(0, 8) }}...</div>
+                  }
+                </div>
+              </div>
             </div>
             <button class="user-dropdown-item wrapped-item" (click)="handleWrappedClick()">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
               </svg>
-              <span>SIGNAL Wrapped</span>
+              <span>Recro Wrapped</span>
               <span class="wrapped-badge font-mono">ИТОГИ</span>
             </button>
             <button class="user-dropdown-item" (click)="handleHistoryClick()">

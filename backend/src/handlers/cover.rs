@@ -12,24 +12,22 @@ pub async fn health_check() -> &'static str {
     "SIGNAL // Rust Engine Online"
 }
 
-fn is_private_or_local_host(host: &str) -> bool {
-    let lower = host.to_lowercase();
-    if lower == "localhost" || lower.ends_with(".local") || lower.ends_with(".internal") {
-        return true;
-    }
-    if let Ok(ip) = host.parse::<IpAddr>() {
-        match ip {
-            IpAddr::V4(v4) => {
-                v4.is_loopback()
-                    || v4.is_private()
-                    || v4.is_link_local()
-                    || v4.is_broadcast()
-                    || v4.is_unspecified()
-            }
-            IpAddr::V6(v6) => v6.is_loopback() || v6.is_unspecified(),
+fn is_private_or_restricted_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => {
+            v4.is_loopback()
+                || v4.is_private()
+                || v4.is_link_local()
+                || v4.is_broadcast()
+                || v4.is_documentation()
+                || v4.is_unspecified()
         }
-    } else {
-        false
+        IpAddr::V6(v6) => {
+            v6.is_loopback()
+                || v6.is_unspecified()
+                || ((v6.segments()[0] & 0xfe00) == 0xfc00) // Unique local fc00::/7
+                || ((v6.segments()[0] & 0xffc0) == 0xfe80) // Link local unicast fe80::/10
+        }
     }
 }
 
@@ -40,15 +38,40 @@ pub async fn proxy_cover(Query(params): Query<CoverParams>) -> Result<Response, 
     }
 
     let parsed_url = reqwest::Url::parse(target).map_err(|_| StatusCode::BAD_REQUEST)?;
-    if let Some(host) = parsed_url.host_str() {
-        if is_private_or_local_host(host) {
-            return Err(StatusCode::FORBIDDEN);
-        }
-    } else {
-        return Err(StatusCode::BAD_REQUEST);
+    let host = parsed_url.host_str().ok_or(StatusCode::BAD_REQUEST)?;
+
+    // Check host string blacklist
+    let lower_host = host.to_lowercase();
+    if lower_host == "localhost"
+        || lower_host.ends_with(".local")
+        || lower_host.ends_with(".internal")
+        || lower_host.ends_with(".lan")
+    {
+        return Err(StatusCode::FORBIDDEN);
     }
 
+    // Resolve DNS and ensure no resolved IP is private/loopback/link-local
+    let port = parsed_url.port_or_known_default().unwrap_or(80);
+    let lookup_addr = format!("{}:{}", host, port);
+    match tokio::net::lookup_host(&lookup_addr).await {
+        Ok(addrs) => {
+            let mut resolved = false;
+            for addr in addrs {
+                resolved = true;
+                if is_private_or_restricted_ip(addr.ip()) {
+                    return Err(StatusCode::FORBIDDEN);
+                }
+            }
+            if !resolved {
+                return Err(StatusCode::BAD_REQUEST);
+            }
+        }
+        Err(_) => return Err(StatusCode::BAD_REQUEST),
+    }
+
+    // Client without automatic redirects to prevent SSRF redirect bypass
     let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
         .timeout(Duration::from_secs(6))
         .build()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -73,6 +96,11 @@ pub async fn proxy_cover(Query(params): Query<CoverParams>) -> Result<Response, 
         .and_then(|v| v.to_str().ok())
         .unwrap_or("image/jpeg")
         .to_string();
+
+    let ct_lower = content_type.to_lowercase();
+    if !ct_lower.starts_with("image/") && ct_lower != "application/octet-stream" {
+        return Err(StatusCode::BAD_REQUEST);
+    }
 
     let bytes = resp.bytes().await.map_err(|_| StatusCode::BAD_GATEWAY)?;
     if bytes.len() > 10 * 1024 * 1024 {

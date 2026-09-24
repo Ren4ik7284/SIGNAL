@@ -5,9 +5,11 @@ services:
       dockerfile: Dockerfile
     container_name: music-backend
     ports:
-      - "8085:8085"
+      - "127.0.0.1:8085:8085"
     environment:
       - RUST_LOG=info
+      - JWT_SECRET=${JWT_SECRET:-}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
     restart: unless-stopped
     networks:
       - music-network
@@ -18,7 +20,7 @@ services:
       dockerfile: Dockerfile
     container_name: music-frontend
     ports:
-      - "4200:80"
+      - "127.0.0.1:4200:80"
     depends_on:
       - backend
     restart: unless-stopped

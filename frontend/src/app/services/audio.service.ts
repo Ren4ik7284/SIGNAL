@@ -383,17 +383,17 @@ export class AudioService {
       ];
 
       navigator.mediaSession.metadata = new MediaMetadata({
-        title: track.title || 'SIGNAL Track',
-        artist: track.artist || 'SIGNAL',
-        album: track.album || 'SIGNAL Stream',
+        title: track.title || 'Recro Track',
+        artist: track.artist || 'Recro',
+        album: track.album || 'Recro Stream',
         artwork: artwork,
       });
     } catch {
       try {
         navigator.mediaSession.metadata = new MediaMetadata({
-          title: track.title || 'SIGNAL Track',
-          artist: track.artist || 'SIGNAL',
-          album: 'SIGNAL Stream',
+          title: track.title || 'Recro Track',
+          artist: track.artist || 'Recro',
+          album: 'Recro Stream',
         });
       } catch {}
     }

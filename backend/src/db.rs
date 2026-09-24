@@ -35,8 +35,10 @@ pub async fn init_db() -> Result<DbPool, sqlx::Error> {
         CREATE TABLE IF NOT EXISTS users (
             id TEXT PRIMARY KEY,
             username TEXT UNIQUE NOT NULL,
-            email TEXT UNIQUE,
             password_hash TEXT NOT NULL,
+            google_id TEXT UNIQUE,
+            email TEXT,
+            avatar_url TEXT,
             created_at INTEGER NOT NULL
         );
         "#,
@@ -44,39 +46,12 @@ pub async fn init_db() -> Result<DbPool, sqlx::Error> {
     .execute(&pool)
     .await?;
 
+    // Автоматическая миграция для существующих баз данных
+    let _ = sqlx::query("ALTER TABLE users ADD COLUMN google_id TEXT").execute(&pool).await;
     let _ = sqlx::query("ALTER TABLE users ADD COLUMN email TEXT").execute(&pool).await;
-    let _ = sqlx::query("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email)").execute(&pool).await;
-
-    sqlx::query(
-        r#"
-        CREATE TABLE IF NOT EXISTS email_verifications (
-            email TEXT PRIMARY KEY,
-            code TEXT NOT NULL,
-            username TEXT NOT NULL,
-            password_hash TEXT NOT NULL,
-            expires_at INTEGER NOT NULL,
-            created_at INTEGER NOT NULL,
-            attempts INTEGER DEFAULT 0
-        );
-        "#,
-    )
-    .execute(&pool)
-    .await?;
-
-    sqlx::query(
-        r#"
-        CREATE TABLE IF NOT EXISTS password_resets (
-            email TEXT PRIMARY KEY,
-            code TEXT NOT NULL,
-            user_id TEXT NOT NULL,
-            expires_at INTEGER NOT NULL,
-            created_at INTEGER NOT NULL,
-            attempts INTEGER DEFAULT 0
-        );
-        "#,
-    )
-    .execute(&pool)
-    .await?;
+    let _ = sqlx::query("ALTER TABLE users ADD COLUMN avatar_url TEXT").execute(&pool).await;
+    let _ = sqlx::query("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id) WHERE google_id IS NOT NULL").execute(&pool).await;
+    let _ = sqlx::query("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)").execute(&pool).await;
 
     sqlx::query(
         r#"

@@ -132,13 +132,28 @@ pub async fn stream_audio(
     let yt_cmd = get_yt_dlp_cmd();
     let mut direct_url = String::new();
 
-    if target.ends_with(".mp3")
-        || target.ends_with(".aac")
-        || target.ends_with(".aacp")
-        || target.ends_with(".m3u8")
-        || target.contains("/stream/")
-        || target.contains(":80")
+    let is_direct_candidate = target.starts_with("http://") || target.starts_with("https://");
+    if is_direct_candidate
+        && (target.ends_with(".mp3")
+            || target.ends_with(".aac")
+            || target.ends_with(".aacp")
+            || target.ends_with(".m3u8")
+            || target.contains("/stream/")
+            || target.contains(":80"))
     {
+        if let Ok(parsed) = reqwest::Url::parse(&target) {
+            if let Some(host) = parsed.host_str() {
+                let lower_host = host.to_lowercase();
+                if lower_host == "localhost"
+                    || lower_host.ends_with(".local")
+                    || lower_host.ends_with(".internal")
+                    || lower_host == "127.0.0.1"
+                    || lower_host == "::1"
+                {
+                    return Err(StatusCode::FORBIDDEN);
+                }
+            }
+        }
         direct_url = target.clone();
     } else if target.contains("soundcloud.com") || target.starts_with("scsearch") {
         println!("[stream] Resolving SoundCloud stream for: {}", target);
@@ -382,6 +397,8 @@ pub async fn stream_audio(
     };
 
     let mut ffmpeg_args = vec![
+        "-protocol_whitelist".to_string(),
+        "http,https,tcp,tls,crypto".to_string(),
         "-user_agent".to_string(),
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36".to_string(),
         "-referer".to_string(),

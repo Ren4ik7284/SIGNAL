@@ -1,6 +1,6 @@
 {
-  "name": "SIGNAL Audio Player",
-  "short_name": "SIGNAL",
+  "name": "Recro Audio Player",
+  "short_name": "Recro",
   "description": "Next-Gen Audio Player with YouTube & Radio Streaming",
   "start_url": "/",
   "scope": "/",

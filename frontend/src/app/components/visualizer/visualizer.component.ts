@@ -17,7 +17,7 @@ import { AudioService } from '../../services/audio.service';
 import { LibraryService } from '../../services/library.service';
 
 export type VisualizerType = 'bars' | 'wave' | 'circle';
-export type VisualizerTheme = 'signal' | 'cyan' | 'amber' | 'emerald';
+export type VisualizerTheme = 'mono' | 'green';
 
 @Component({
   selector: 'app-visualizer',
@@ -37,7 +37,7 @@ export class VisualizerComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild('visualizerContainer') containerRef?: ElementRef<HTMLDivElement>;
 
   readonly visualType = signal<VisualizerType>('bars');
-  readonly colorTheme = signal<VisualizerTheme>('signal');
+  readonly colorTheme = signal<VisualizerTheme>('mono');
   readonly sensitivity = signal<number>(1.2);
   readonly isFullscreen = signal<boolean>(false);
 
@@ -164,39 +164,28 @@ export class VisualizerComponent implements OnInit, AfterViewInit, OnDestroy {
     primary: string;
     secondary: string;
     glow: string;
-    gradient: CanvasGradient;
+    gradient: string;
     peak: string;
   } {
     const theme = this.colorTheme();
 
-    let c1 = '#ffffff';
-    let c2 = '#71717a';
-    let glow = 'rgba(255, 255, 255, 0.4)';
-    let peak = '#ffffff';
-
-    if (theme === 'cyan') {
-      c1 = '#38bdf8';
-      c2 = '#0284c7';
-      glow = 'rgba(56, 189, 248, 0.6)';
-      peak = '#e0f2fe';
-    } else if (theme === 'amber') {
-      c1 = '#fbbf24';
-      c2 = '#d97706';
-      glow = 'rgba(251, 191, 36, 0.6)';
-      peak = '#fef3c7';
-    } else if (theme === 'emerald') {
-      c1 = '#34d399';
-      c2 = '#059669';
-      glow = 'rgba(52, 211, 153, 0.6)';
-      peak = '#d1fae5';
+    if (theme === 'green') {
+      return {
+        primary: '#22c55e',
+        secondary: '#3f3f46',
+        glow: 'transparent',
+        gradient: '#22c55e',
+        peak: '#fafafa',
+      };
     }
 
-    const grad = ctx.createLinearGradient(0, height, 0, 0);
-    grad.addColorStop(0, c2);
-    grad.addColorStop(0.7, c1);
-    grad.addColorStop(1, peak);
-
-    return { primary: c1, secondary: c2, glow, gradient: grad, peak };
+    return {
+      primary: '#fafafa',
+      secondary: '#3f3f46',
+      glow: 'transparent',
+      gradient: '#e4e4e7',
+      peak: '#ffffff',
+    };
   }
 
   private draw() {
@@ -328,13 +317,7 @@ export class VisualizerComponent implements OnInit, AfterViewInit, OnDestroy {
     ctx.save();
     ctx.lineWidth = Math.max(2, (w / 400) * 1.5);
     ctx.strokeStyle = colors.primary;
-    ctx.shadowColor = colors.glow;
-    ctx.shadowBlur = 10;
-
-    // Create gradient fill under curve
-    const fillGrad = ctx.createLinearGradient(0, 0, 0, h);
-    fillGrad.addColorStop(0, 'rgba(255, 255, 255, 0.15)');
-    fillGrad.addColorStop(1, 'rgba(0, 0, 0, 0.0)');
+    ctx.shadowBlur = 0;
 
     ctx.beginPath();
     ctx.moveTo(0, h / 2);
@@ -365,7 +348,7 @@ export class VisualizerComponent implements OnInit, AfterViewInit, OnDestroy {
     ctx.lineTo(w, h);
     ctx.lineTo(0, h);
     ctx.closePath();
-    ctx.fillStyle = fillGrad;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
     ctx.fill();
 
     ctx.restore();
@@ -390,7 +373,7 @@ export class VisualizerComponent implements OnInit, AfterViewInit, OnDestroy {
     ctx.save();
     ctx.translate(centerX, centerY);
 
-    // Inner glowing ring
+    // Inner ring
     ctx.beginPath();
     ctx.arc(0, 0, Math.max(10, currentRadius - 6), 0, Math.PI * 2);
     ctx.strokeStyle = colors.secondary;
@@ -400,8 +383,7 @@ export class VisualizerComponent implements OnInit, AfterViewInit, OnDestroy {
     ctx.beginPath();
     ctx.arc(0, 0, currentRadius, 0, Math.PI * 2);
     ctx.strokeStyle = colors.primary;
-    ctx.shadowColor = colors.glow;
-    ctx.shadowBlur = 12;
+    ctx.shadowBlur = 0;
     ctx.lineWidth = 2;
     ctx.stroke();
 

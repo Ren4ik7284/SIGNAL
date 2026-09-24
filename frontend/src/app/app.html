@@ -491,7 +491,7 @@
 
               @if (libraryService.allTracksCount() === 0) {
                 <h3 class="empty-title">Ваша медиатека пуста</h3>
-                <p class="empty-desc">Вставьте ссылку на YouTube (видео или плейлист) или найдите онлайн через Rust-бэкенд.</p>
+                <p class="empty-desc">Вставьте ссылку на YouTube (видео или плейлист) или найдите треки через поиск.</p>
                 <div class="empty-actions-row">
                   <button class="btn-empty-action" (click)="addModalTab.set('youtube'); isAddModalOpen.set(true)">
                     <span>Добавить ссылку с YouTube</span>
@@ -1476,7 +1476,7 @@
       <div class="modal-dialog pwa-install-dialog" (click)="$event.stopPropagation()">
         <div class="modal-header">
           <div>
-            <h3 class="modal-title">Установка SIGNAL</h3>
+            <h3 class="modal-title">Установка Recro</h3>
             <p class="modal-subtitle">Приложение без рамок браузера на вашем телефоне</p>
           </div>
           <button class="btn-close-sm" (click)="isPwaModalOpen.set(false)">
@@ -1543,27 +1543,15 @@
             <h3 class="modal-title">
               @if (authModalTab() === 'login') {
                 Вход в аккаунт
-              } @else if (authModalTab() === 'register') {
-                {{ registerStep() === 'verify' ? 'Подтверждение почты' : 'Регистрация в SIGNAL' }}
               } @else {
-                {{ registerStep() === 'verify' ? 'Новый пароль' : 'Восстановление доступа' }}
+                Регистрация в Recro
               }
             </h3>
             <p class="modal-subtitle">
               @if (authModalTab() === 'login') {
-                Вход по логину или email
-              } @else if (authModalTab() === 'register') {
-                @if (registerStep() === 'verify') {
-                  Введите 6-значный код для {{ authEmailInput() }}
-                } @else {
-                  Создание профиля в SIGNAL AUDIO
-                }
+                Вход по имени пользователя
               } @else {
-                @if (registerStep() === 'verify') {
-                  Введите код подтверждения и новый пароль
-                } @else {
-                  Сброс пароля по логину или email
-                }
+                Создание профиля в Recro
               }
             </p>
           </div>
@@ -1602,7 +1590,7 @@
               </svg>
               <span>{{ err }}</span>
             </div>
-            @if (err.includes('уже существует') || err.includes('уже зарегистрирован')) {
+            @if (err.includes('уже существует')) {
               <div style="display: flex; gap: 8px; margin-bottom: 12px;">
                 <button type="button" class="btn-text-sm" (click)="authModalTab.set('login'); authService.authError.set(null)">
                   Перейти ко входу
@@ -1613,10 +1601,10 @@
 
           @if (authModalTab() === 'login') {
             <div class="input-field">
-              <label class="field-label">Логин или Email</label>
+              <label class="field-label">Логин</label>
               <input 
                 type="text" 
-                placeholder="Имя пользователя или email..." 
+                placeholder="Имя пользователя..." 
                 [ngModel]="authUsernameInput()"
                 (ngModelChange)="authUsernameInput.set($event)"
                 (keyup.enter)="submitAuth()"
@@ -1704,6 +1692,55 @@
               <span class="field-hint">Пароль для безопасного входа в аккаунт</span>
             </div>
           }
+
+          <div class="auth-divider">
+            <span class="auth-divider-line"></span>
+            <span class="auth-divider-text font-mono">или</span>
+            <span class="auth-divider-line"></span>
+          </div>
+
+          <div class="google-auth-section">
+            <div id="google-btn-slot" class="google-btn-wrapper" [class.hidden]="!authService.googleClientId()"></div>
+
+            @if (!authService.googleClientId()) {
+              <button 
+                type="button" 
+                class="btn-google-auth-custom font-mono" 
+                (click)="toggleGoogleConfig()"
+                title="Войти через Google"
+              >
+                <svg class="google-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.44 16.133 0 12.48 0 5.867 0 .307 5.387.307 12s5.56 12 12.173 12c3.573 0 6.267-1.173 8.373-3.36 2.16-2.16 2.84-5.213 2.84-7.667 0-.76-.053-1.467-.173-2.053H12.48z"/>
+                </svg>
+                <span>Войти через Google</span>
+              </button>
+            }
+
+            @if (isGoogleConfigOpen()) {
+              <div class="google-config-panel font-mono">
+                <div class="g-cfg-header">
+                  <span class="g-cfg-title">Подключение Google OAuth</span>
+                  <button type="button" class="btn-text-sm" (click)="isGoogleConfigOpen.set(false)">✕</button>
+                </div>
+                <p class="g-cfg-hint">
+                  Укажите Google OAuth Client ID (из Google Cloud Console) или задайте переменную <code>GOOGLE_CLIENT_ID</code>:
+                </p>
+                <div class="g-cfg-input-row">
+                  <input 
+                    type="text" 
+                    placeholder="xxxx.apps.googleusercontent.com" 
+                    [ngModel]="customGoogleClientIdInput()"
+                    (ngModelChange)="customGoogleClientIdInput.set($event)"
+                    (keyup.enter)="saveCustomGoogleClientId()"
+                    class="form-text-input g-cfg-input"
+                  />
+                  <button type="button" class="btn-g-cfg-save" (click)="saveCustomGoogleClientId()">
+                    Сохранить
+                  </button>
+                </div>
+              </div>
+            }
+          </div>
         </div>
 
         <div class="modal-footer auth-modal-footer">
@@ -1746,7 +1783,7 @@
       <div class="modal-dialog wrapped-dialog" (click)="$event.stopPropagation()">
         <div class="wrapped-dialog-header">
           <div class="wrapped-badge-row">
-            <span class="wrapped-glow-tag font-mono">SIGNAL WRAPPED</span>
+            <span class="wrapped-glow-tag font-mono">RECRO WRAPPED</span>
             <span class="wrapped-year font-mono">2026</span>
           </div>
           <h2 class="wrapped-main-title">ТВОЙ МУЗЫКАЛЬНЫЙ ИТОГ</h2>
@@ -1873,7 +1910,7 @@
 
             @if (ws.total_plays === 0) {
               <div class="w-empty-state">
-                <p class="w-empty-msg">В вашей истории пока нет записей. Включайте любимые треки, и они появятся в вашем персональном SIGNAL Wrapped!</p>
+                <p class="w-empty-msg">В вашей истории пока нет записей. Включайте любимые треки, и они появятся в вашем персональном Recro Wrapped!</p>
               </div>
             }
           }

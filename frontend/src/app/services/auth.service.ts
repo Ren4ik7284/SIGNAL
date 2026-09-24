@@ -4,6 +4,12 @@ export interface UserInfo {
   id: string;
   username: string;
   email?: string;
+  avatar_url?: string;
+}
+
+export interface AuthConfigResponse {
+  google_client_id?: string;
+  google_auth_enabled: boolean;
 }
 
 export interface AuthResponse {
@@ -65,13 +71,16 @@ export interface HistoryItem {
 export class AuthService {
   private readonly TOKEN_STORAGE_KEY = 'signal_auth_jwt_token';
   private readonly USER_STORAGE_KEY = 'signal_auth_user_data';
+  private readonly GOOGLE_CLIENT_ID_STORAGE_KEY = 'signal_google_client_id';
 
   readonly token = signal<string | null>(null);
   readonly currentUser = signal<UserInfo | null>(null);
   readonly isAuthenticated = computed(() => !!this.token() && !!this.currentUser());
   readonly isAuthLoading = signal<boolean>(false);
   readonly authError = signal<string | null>(null);
-  readonly fallbackCode = signal<string | null>(null);
+
+  readonly googleClientId = signal<string | null>(null);
+  readonly isGoogleAuthEnabled = signal<boolean>(false);
 
   constructor() {
     this.restoreSession();
@@ -85,6 +94,11 @@ export class AuthService {
       if (savedToken && savedUser) {
         this.token.set(savedToken);
         this.currentUser.set(JSON.parse(savedUser));
+      }
+      const savedGoogleId = localStorage.getItem(this.GOOGLE_CLIENT_ID_STORAGE_KEY);
+      if (savedGoogleId) {
+        this.googleClientId.set(savedGoogleId);
+        this.isGoogleAuthEnabled.set(true);
       }
     } catch {
       this.clearSession();
@@ -103,13 +117,6 @@ export class AuthService {
     return /\s/.test(str.trim());
   }
 
-  isValidEmail(email: string): boolean {
-    const clean = email.trim();
-    if (this.hasWhitespace(clean)) return false;
-    const re = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
-    return re.test(clean);
-  }
-
   isValidUsername(username: string): boolean {
     const clean = username.trim();
     if (this.hasWhitespace(clean)) return false;
@@ -119,7 +126,7 @@ export class AuthService {
 
   isValidPassword(password: string): boolean {
     const clean = password.trim();
-    return clean.length >= 6 && clean.length <= 128;
+    return clean.length >= 6 && clean.length <= 72;
   }
 
   private activeBackendUrl = 'https://signal-audio-backend-production.up.railway.app';
@@ -169,7 +176,7 @@ export class AuthService {
     const cleanPass = password.trim();
 
     if (!cleanLogin) {
-      this.authError.set('Введите логин или email');
+      this.authError.set('Введите имя пользователя');
       this.isAuthLoading.set(false);
       return false;
     }
@@ -181,7 +188,7 @@ export class AuthService {
     }
 
     if (this.hasWhitespace(cleanLogin)) {
-      this.authError.set('Логин или email не должен содержать пробелы внутри');
+      this.authError.set('Имя пользователя не должно содержать пробелы');
       this.isAuthLoading.set(false);
       return false;
     }
@@ -245,7 +252,7 @@ export class AuthService {
     }
 
     if (!this.isValidPassword(cleanPass)) {
-      this.authError.set('Пароль должен содержать не менее 6 символов');
+      this.authError.set('Пароль должен содержать от 6 до 72 символов');
       this.isAuthLoading.set(false);
       return false;
     }
@@ -283,95 +290,62 @@ export class AuthService {
     }
   }
 
-  async sendVerificationCode(backendUrl: string, username: string, email: string, password: string): Promise<boolean> {
-    this.isAuthLoading.set(true);
-    this.authError.set(null);
-
-    const cleanUser = username.trim();
-    const cleanEmail = email.trim().toLowerCase();
-
-    if (!this.isValidUsername(cleanUser)) {
-      this.authError.set('Имя пользователя должно быть от 3 до 30 символов без пробелов (только латиница, цифры, _ и -)');
-      this.isAuthLoading.set(false);
-      return false;
-    }
-
-    if (!this.isValidEmail(cleanEmail)) {
-      this.authError.set('Введите корректный email (например, name@example.com)');
-      this.isAuthLoading.set(false);
-      return false;
-    }
-
-    const cleanPass = password.trim();
-
-    if (!this.isValidPassword(cleanPass)) {
-      this.authError.set('Пароль должен содержать от 6 до 128 символов');
-      this.isAuthLoading.set(false);
-      return false;
-    }
-
+  async fetchAuthConfig(backendUrl: string): Promise<void> {
     const base = this.getEffectiveBackendUrl(backendUrl);
-
     try {
-      const res = await fetch(`${base}/api/auth/send-code`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: cleanUser,
-          email: cleanEmail,
-          password: cleanPass,
-        }),
-      });
-
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        this.authError.set(data?.error || 'Ошибка отправки кода');
-        return false;
+      const res = await fetch(`${base}/api/auth/config`);
+      if (res.ok) {
+        const data: AuthConfigResponse = await res.json();
+        if (data.google_client_id) {
+          this.googleClientId.set(data.google_client_id);
+          this.isGoogleAuthEnabled.set(true);
+        } else {
+          // Проверяем сохраненный пользователем клиентский ID
+          const localId = localStorage.getItem(this.GOOGLE_CLIENT_ID_STORAGE_KEY);
+          if (localId) {
+            this.googleClientId.set(localId);
+            this.isGoogleAuthEnabled.set(true);
+          }
+        }
       }
-
-      if (data?.fallback_code) {
-        this.fallbackCode.set(data.fallback_code);
-      } else {
-        this.fallbackCode.set(null);
-      }
-
-      return true;
-    } catch {
-      this.authError.set('Не удалось связаться с сервером');
-      return false;
-    } finally {
-      this.isAuthLoading.set(false);
+    } catch (e) {
+      console.warn('[SIGNAL AUTH] Не удалось загрузить конфигурацию аутентификации:', e);
     }
   }
 
-  async verifyCode(backendUrl: string, email: string, code: string): Promise<boolean> {
+  setCustomGoogleClientId(clientId: string | null) {
+    if (clientId && clientId.trim()) {
+      const clean = clientId.trim();
+      this.googleClientId.set(clean);
+      this.isGoogleAuthEnabled.set(true);
+      try {
+        localStorage.setItem(this.GOOGLE_CLIENT_ID_STORAGE_KEY, clean);
+      } catch {}
+    } else {
+      this.googleClientId.set(null);
+      this.isGoogleAuthEnabled.set(false);
+      try {
+        localStorage.removeItem(this.GOOGLE_CLIENT_ID_STORAGE_KEY);
+      } catch {}
+    }
+  }
+
+  async loginWithGoogle(backendUrl: string, credential: string): Promise<boolean> {
     this.isAuthLoading.set(true);
     this.authError.set(null);
-
-    const cleanEmail = email.trim().toLowerCase();
-    const cleanCode = code.trim();
-
-    if (cleanCode.length !== 6 || !/^\d{6}$/.test(cleanCode)) {
-      this.authError.set('Введите 6-значный цифровой код');
-      this.isAuthLoading.set(false);
-      return false;
-    }
 
     const base = this.getEffectiveBackendUrl(backendUrl);
 
     try {
-      const res = await fetch(`${base}/api/auth/verify-code`, {
+      const res = await fetch(`${base}/api/auth/google`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: cleanEmail,
-          code: cleanCode,
-        }),
+        body: JSON.stringify({ credential }),
       });
 
       const data = await res.json().catch(() => null);
       if (!res.ok) {
-        this.authError.set(data?.error || 'Неверный код подтверждения');
+        this.authError.set(data?.error || 'Ошибка входа через Google');
         return false;
       }
 
@@ -384,137 +358,9 @@ export class AuthService {
       } catch {}
 
       return true;
-    } catch {
-      this.authError.set('Не удалось завершить подтверждение');
-      return false;
-    } finally {
-      this.isAuthLoading.set(false);
-    }
-  }
-
-  async resendCode(backendUrl: string, email: string): Promise<boolean> {
-    this.isAuthLoading.set(true);
-    this.authError.set(null);
-
-    const base = this.getEffectiveBackendUrl(backendUrl);
-
-    try {
-      const res = await fetch(`${base}/api/auth/resend-code`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim().toLowerCase() }),
-      });
-
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        this.authError.set(data?.error || 'Не удалось отправить код повторно');
-        return false;
-      }
-
-      if (data?.fallback_code) {
-        this.fallbackCode.set(data.fallback_code);
-      }
-
-      return true;
-    } catch {
-      this.authError.set('Не удалось связаться с сервером');
-      return false;
-    } finally {
-      this.isAuthLoading.set(false);
-    }
-  }
-
-  async requestPasswordReset(backendUrl: string, loginOrEmail: string): Promise<boolean> {
-    this.isAuthLoading.set(true);
-    this.authError.set(null);
-
-    const clean = loginOrEmail.trim();
-    if (!clean) {
-      this.authError.set('Введите логин или email');
-      this.isAuthLoading.set(false);
-      return false;
-    }
-
-    const base = this.getEffectiveBackendUrl(backendUrl);
-
-    try {
-      const res = await fetch(`${base}/api/auth/reset-password-code`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email_or_login: clean }),
-      });
-
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        this.authError.set(data?.error || 'Не удалось запросить сброс пароля');
-        return false;
-      }
-
-      if (data?.fallback_code) {
-        this.fallbackCode.set(data.fallback_code);
-      } else {
-        this.fallbackCode.set(null);
-      }
-
-      return true;
-    } catch {
-      this.authError.set('Не удалось связаться с сервером');
-      return false;
-    } finally {
-      this.isAuthLoading.set(false);
-    }
-  }
-
-  async confirmPasswordReset(backendUrl: string, loginOrEmail: string, code: string, newPassword: string): Promise<boolean> {
-    this.isAuthLoading.set(true);
-    this.authError.set(null);
-
-    const cleanInput = loginOrEmail.trim();
-    const cleanCode = code.trim();
-    const cleanPass = newPassword.trim();
-
-    if (cleanCode.length !== 6 || !/^\d{6}$/.test(cleanCode)) {
-      this.authError.set('Введите 6-значный цифровой код');
-      this.isAuthLoading.set(false);
-      return false;
-    }
-
-    if (cleanPass.length < 6) {
-      this.authError.set('Новый пароль должен быть не менее 6 символов');
-      this.isAuthLoading.set(false);
-      return false;
-    }
-
-    const base = this.getEffectiveBackendUrl(backendUrl);
-
-    try {
-      const res = await fetch(`${base}/api/auth/reset-password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email_or_login: cleanInput,
-          code: cleanCode,
-          new_password: cleanPass,
-        }),
-      });
-
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        this.authError.set(data?.error || 'Не удалось сбросить пароль');
-        return false;
-      }
-
-      this.token.set(data.token);
-      this.currentUser.set(data.user);
-
-      try {
-        localStorage.setItem(this.TOKEN_STORAGE_KEY, data.token);
-        localStorage.setItem(this.USER_STORAGE_KEY, JSON.stringify(data.user));
-      } catch {}
-
-      return true;
-    } catch {
-      this.authError.set('Не удалось связаться с сервером');
+    } catch (e: any) {
+      console.error('[SIGNAL GOOGLE AUTH ERROR]', e);
+      this.authError.set('Не удалось подключиться к серверу для авторизации через Google');
       return false;
     } finally {
       this.isAuthLoading.set(false);
@@ -528,7 +374,6 @@ export class AuthService {
   private clearSession() {
     this.token.set(null);
     this.currentUser.set(null);
-    this.fallbackCode.set(null);
     try {
       localStorage.removeItem(this.TOKEN_STORAGE_KEY);
       localStorage.removeItem(this.USER_STORAGE_KEY);

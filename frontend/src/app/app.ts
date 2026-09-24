@@ -19,6 +19,12 @@ import { VisualizerComponent } from './components/visualizer/visualizer.componen
 import { OfflineService } from './services/offline.service';
 import { AuthService, HistoryItem, WrappedStats } from './services/auth.service';
 
+declare global {
+  interface Window {
+    google?: any;
+  }
+}
+
 @Component({
   selector: 'app-root',
   standalone: true,
@@ -34,15 +40,12 @@ export class App implements OnInit {
   readonly authService = inject(AuthService);
 
   readonly isAuthModalOpen = signal<boolean>(false);
-  readonly authModalTab = signal<'login' | 'register' | 'reset'>('login');
+  readonly authModalTab = signal<'login' | 'register'>('login');
   readonly authUsernameInput = signal<string>('');
-  readonly authEmailInput = signal<string>('');
   readonly authPasswordInput = signal<string>('');
-  readonly authCodeInput = signal<string>('');
-  readonly registerStep = signal<'input' | 'verify'>('input');
-  readonly resendCountdown = signal<number>(0);
-  private resendTimer: any = null;
   readonly showPassword = signal<boolean>(false);
+  readonly isGoogleConfigOpen = signal<boolean>(false);
+  readonly customGoogleClientIdInput = signal<string>('');
 
   readonly isWrappedModalOpen = signal<boolean>(false);
   readonly wrappedStats = signal<WrappedStats | null>(null);
@@ -136,6 +139,7 @@ export class App implements OnInit {
 
   ngOnInit() {
     this.libraryService.checkBackendHealth();
+    this.authService.fetchAuthConfig(this.libraryService.getBackendUrl());
 
     if (typeof window !== 'undefined') {
       const isIosDevice = /iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -232,170 +236,107 @@ export class App implements OnInit {
     }, 3000);
   }
 
-  openAuthModal(tab: 'login' | 'register' | 'reset' = 'login') {
+  openAuthModal(tab: 'login' | 'register' = 'login') {
     this.authModalTab.set(tab);
     this.authUsernameInput.set('');
-    this.authEmailInput.set('');
     this.authPasswordInput.set('');
-    this.authCodeInput.set('');
-    this.registerStep.set('input');
-    this.clearResendTimer();
     this.authService.authError.set(null);
-    this.authService.fallbackCode.set(null);
+    this.isGoogleConfigOpen.set(false);
+    this.customGoogleClientIdInput.set(this.authService.googleClientId() || '');
     this.isAuthModalOpen.set(true);
+
+    this.renderGoogleButton();
   }
 
-  private startResendTimer() {
-    this.clearResendTimer();
-    this.resendCountdown.set(60);
-    this.resendTimer = setInterval(() => {
-      const current = this.resendCountdown();
-      if (current <= 1) {
-        this.clearResendTimer();
-      } else {
-        this.resendCountdown.set(current - 1);
-      }
-    }, 1000);
+  toggleGoogleConfig() {
+    this.isGoogleConfigOpen.update((v) => !v);
   }
 
-  private clearResendTimer() {
-    if (this.resendTimer) {
-      clearInterval(this.resendTimer);
-      this.resendTimer = null;
+  saveCustomGoogleClientId() {
+    const val = this.customGoogleClientIdInput().trim();
+    if (!val) {
+      this.authService.authError.set('Введите Google Client ID');
+      return;
     }
-    this.resendCountdown.set(0);
+    this.authService.setCustomGoogleClientId(val);
+    this.isGoogleConfigOpen.set(false);
+    this.showToast('Google Client ID сохранён');
+    this.renderGoogleButton();
   }
 
-  async startRegistration() {
-    const username = this.authUsernameInput().trim();
-    const email = this.authEmailInput().trim().toLowerCase();
-    const password = this.authPasswordInput().trim();
+  async renderGoogleButton() {
     const backendUrl = this.libraryService.getBackendUrl();
+    await this.authService.fetchAuthConfig(backendUrl);
 
-    if (!username || !email || !password) {
-      this.authService.authError.set('Заполните все поля регистрации');
+    const clientId = this.authService.googleClientId();
+    if (!clientId) return;
+
+    const loaded = await this.ensureGoogleScriptLoaded();
+    if (!loaded || !window.google?.accounts?.id) {
       return;
     }
 
-    if (this.authService.hasWhitespace(username)) {
-      this.authService.authError.set('Имя пользователя не должно содержать пробелы');
-      return;
-    }
+    try {
+      window.google.accounts.id.initialize({
+        client_id: clientId,
+        callback: async (response: any) => {
+          if (response && response.credential) {
+            const ok = await this.authService.loginWithGoogle(
+              this.libraryService.getBackendUrl(),
+              response.credential
+            );
+            if (ok) {
+              this.isAuthModalOpen.set(false);
+              const username = this.authService.currentUser()?.username || 'пользователь';
+              this.showToast(`Вход выполнен! С возвращением, ${username}!`);
+              await this.libraryService.onUserLoggedIn();
+            }
+          }
+        },
+        auto_select: false,
+        cancel_on_tap_outside: true,
+        ux_mode: 'popup',
+        context: 'signin',
+      });
 
-    if (this.authService.hasWhitespace(email)) {
-      this.authService.authError.set('Email не должен содержать пробелы');
-      return;
-    }
-
-    if (!this.authService.isValidUsername(username)) {
-      this.authService.authError.set('Имя пользователя должно быть от 3 до 30 символов (латиница, цифры, _ и -)');
-      return;
-    }
-
-    if (!this.authService.isValidEmail(email)) {
-      this.authService.authError.set('Введите корректный адрес электронной почты (например, user@example.com)');
-      return;
-    }
-
-    if (!this.authService.isValidPassword(password)) {
-      this.authService.authError.set('Пароль должен содержать от 6 до 128 символов');
-      return;
-    }
-
-    const ok = await this.authService.sendVerificationCode(backendUrl, username, email, password);
-    if (ok) {
-      this.registerStep.set('verify');
-      this.authCodeInput.set('');
-      this.showToast(`Код отправлен на ${email}`);
-      this.startResendTimer();
+      setTimeout(() => {
+        const slot = document.getElementById('google-btn-slot');
+        if (slot && window.google?.accounts?.id) {
+          slot.innerHTML = '';
+          const buttonWidth = typeof window !== 'undefined' ? Math.min(320, window.innerWidth - 64) : 280;
+          window.google.accounts.id.renderButton(slot, {
+            type: 'standard',
+            theme: 'filled_black',
+            size: 'large',
+            text: 'signin_with',
+            shape: 'rectangular',
+            logo_alignment: 'left',
+            width: buttonWidth,
+          });
+        }
+      }, 60);
+    } catch (err) {
+      console.warn('[SIGNAL GSI] Ошибка инициализации кнопки Google:', err);
     }
   }
 
-  async confirmRegistrationCode() {
-    const email = this.authEmailInput().trim().toLowerCase();
-    const code = this.authCodeInput().trim();
-    const username = this.authUsernameInput().trim();
-    const backendUrl = this.libraryService.getBackendUrl();
+  private ensureGoogleScriptLoaded(): Promise<boolean> {
+    if (typeof window === 'undefined') return Promise.resolve(false);
+    if (window.google?.accounts?.id) return Promise.resolve(true);
 
-    if (code.length !== 6 || !/^\d{6}$/.test(code)) {
-      this.authService.authError.set('Введите 6-значный цифровой код из письма');
-      return;
-    }
-
-    const ok = await this.authService.verifyCode(backendUrl, email, code);
-    if (ok) {
-      this.clearResendTimer();
-      this.authPasswordInput.set('');
-      this.authCodeInput.set('');
-      this.isAuthModalOpen.set(false);
-      this.showToast(`Регистрация подтверждена! Добро пожаловать, ${username}!`);
-      await this.libraryService.onUserLoggedIn();
-    }
-  }
-
-  async resendVerificationCode() {
-    if (this.resendCountdown() > 0 || this.authService.isAuthLoading()) return;
-    const email = this.authEmailInput().trim().toLowerCase();
-    const backendUrl = this.libraryService.getBackendUrl();
-
-    const ok = await this.authService.resendCode(backendUrl, email);
-    if (ok) {
-      this.startResendTimer();
-      this.authCodeInput.set('');
-      this.showToast(`Новый код отправлен на ${email}`);
-    }
-  }
-
-  backToRegisterInputs() {
-    this.clearResendTimer();
-    this.registerStep.set('input');
-    this.authService.authError.set(null);
-  }
-
-  async startPasswordReset() {
-    const loginOrEmail = this.authEmailInput().trim() || this.authUsernameInput().trim();
-    const backendUrl = this.libraryService.getBackendUrl();
-
-    if (!loginOrEmail) {
-      this.authService.authError.set('Введите ваш логин или email для сброса пароля');
-      return;
-    }
-
-    const ok = await this.authService.requestPasswordReset(backendUrl, loginOrEmail);
-    if (ok) {
-      this.registerStep.set('verify');
-      this.authCodeInput.set('');
-      this.showToast('Код сброса отправлен на email');
-      this.startResendTimer();
-    }
-  }
-
-  async confirmPasswordReset() {
-    const loginOrEmail = this.authEmailInput().trim() || this.authUsernameInput().trim();
-    const code = this.authCodeInput().trim();
-    const newPassword = this.authPasswordInput().trim();
-    const backendUrl = this.libraryService.getBackendUrl();
-
-    if (code.length !== 6 || !/^\d{6}$/.test(code)) {
-      this.authService.authError.set('Введите 6-значный цифровой код');
-      return;
-    }
-
-    if (newPassword.length < 6) {
-      this.authService.authError.set('Новый пароль должен быть не менее 6 символов');
-      return;
-    }
-
-    const ok = await this.authService.confirmPasswordReset(backendUrl, loginOrEmail, code, newPassword);
-    if (ok) {
-      this.clearResendTimer();
-      this.authPasswordInput.set('');
-      this.authCodeInput.set('');
-      this.authService.fallbackCode.set(null);
-      this.isAuthModalOpen.set(false);
-      this.showToast('Пароль успешно обновлен! Добро пожаловать!');
-      await this.libraryService.onUserLoggedIn();
-    }
+    return new Promise((resolve) => {
+      let attempts = 0;
+      const timer = setInterval(() => {
+        attempts++;
+        if (window.google?.accounts?.id) {
+          clearInterval(timer);
+          resolve(true);
+        } else if (attempts >= 25) {
+          clearInterval(timer);
+          resolve(false);
+        }
+      }, 100);
+    });
   }
 
   async submitAuth() {
@@ -406,19 +347,18 @@ export class App implements OnInit {
       const pass = this.authPasswordInput().trim();
 
       if (!loginVal || !pass) {
-        this.authService.authError.set('Заполните логин/email и пароль');
+        this.authService.authError.set('Заполните логин и пароль');
         return;
       }
 
       if (this.authService.hasWhitespace(loginVal)) {
-        this.authService.authError.set('Логин или email не должен содержать пробелы');
+        this.authService.authError.set('Логин не должен содержать пробелы');
         return;
       }
 
       const ok = await this.authService.login(backendUrl, loginVal, pass);
       if (ok) {
         this.authPasswordInput.set('');
-        this.authCodeInput.set('');
         this.isAuthModalOpen.set(false);
         this.showToast(`Добро пожаловать, ${this.authService.currentUser()?.username || loginVal}!`);
         await this.libraryService.onUserLoggedIn();
@@ -443,30 +383,23 @@ export class App implements OnInit {
       }
 
       if (!this.authService.isValidPassword(pass)) {
-        this.authService.authError.set('Пароль должен содержать от 6 до 128 символов');
+        this.authService.authError.set('Пароль должен содержать от 6 до 72 символов');
         return;
       }
 
       const ok = await this.authService.register(backendUrl, username, pass);
       if (ok) {
         this.authPasswordInput.set('');
-        this.authCodeInput.set('');
         this.isAuthModalOpen.set(false);
         this.showToast(`Регистрация успешна! Добро пожаловать, ${username}!`);
         await this.libraryService.onUserLoggedIn();
-      }
-    } else if (this.authModalTab() === 'reset') {
-      if (this.registerStep() === 'input') {
-        await this.startPasswordReset();
-      } else {
-        await this.confirmPasswordReset();
       }
     }
   }
 
   async openWrappedModal() {
     if (!this.authService.isAuthenticated()) {
-      this.showToast('Войдите в аккаунт для просмотра SIGNAL Wrapped');
+      this.showToast('Войдите в аккаунт для просмотра Recro Wrapped');
       this.openAuthModal('login');
       return;
     }
@@ -910,7 +843,7 @@ export class App implements OnInit {
           id: 'manual-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
           title,
           artist: artist || 'Разные исполнители',
-          album: 'SIGNAL Music',
+          album: 'Recro Music',
           duration: 0,
           audioUrl: `/api/stream?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}`,
           genre: this.inputGenre() || 'Music',
@@ -962,7 +895,7 @@ export class App implements OnInit {
       id: 'manual-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
       title,
       artist,
-      album: 'SIGNAL Music',
+      album: 'Recro Music',
       duration: 0,
       audioUrl: `/api/stream?title=${encodeURIComponent(title)}&artist=${encodeURIComponent(artist)}`,
       genre: 'Music',

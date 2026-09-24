@@ -73,9 +73,9 @@
         color: var(--text-muted);
 
         &.wrapped-pill {
-          color: #38bdf8;
-          background: rgba(56, 189, 248, 0.15);
-          border: 1px solid rgba(56, 189, 248, 0.35);
+          color: var(--accent-green);
+          background: var(--accent-green-subtle);
+          border: 1px solid var(--accent-green-border);
           padding: 1px 6px;
           border-radius: 4px;
           font-weight: 700;
@@ -84,12 +84,12 @@
       }
 
       &.wrapped-nav-item {
-        color: #e0f2fe;
+        color: var(--text-primary);
         svg {
-          color: #38bdf8;
+          color: var(--accent-green);
         }
         &:hover {
-          background-color: rgba(56, 189, 248, 0.08);
+          background-color: var(--accent-green-subtle);
           color: #fff;
         }
       }
@@ -172,9 +172,9 @@
       align-items: center;
       gap: 6px;
       font-size: 11px;
-      color: #38bdf8;
-      background: rgba(56, 189, 248, 0.08);
-      border: 1px solid rgba(56, 189, 248, 0.2);
+      color: var(--text-primary);
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
       padding: 4px 8px;
       border-radius: 6px;
 
@@ -182,7 +182,7 @@
         width: 6px;
         height: 6px;
         border-radius: 50%;
-        background-color: #22c55e;
+        background-color: var(--accent-green);
       }
 
       .user-active-name {
@@ -211,21 +211,6 @@
       &:hover {
         background-color: var(--bg-panel);
         border-color: var(--border-focus);
-      }
-    }
-
-    .engine-meta {
-      .engine-title {
-        font-size: 10px;
-        font-family: var(--font-mono);
-        color: var(--text-secondary);
-        letter-spacing: 0.05em;
-      }
-      .engine-sub {
-        font-size: 10px;
-        font-family: var(--font-mono);
-        color: var(--text-muted);
-        margin-top: 2px;
       }
     }
   }

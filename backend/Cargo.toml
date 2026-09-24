@@ -9,7 +9,7 @@ tokio = { version = "1", features = ["full"] }
 tower-http = { version = "0.6", features = ["cors", "limit"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "json"] }
 tokio-util = { version = "0.7", features = ["io"] }
 urlencoding = "2.1"
 sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite"] }
@@ -17,6 +17,4 @@ jsonwebtoken = { version = "11.1.0", features = ["rust_crypto"] }
 bcrypt = "0.19.3"
 chrono = { version = "0.4.45", features = ["serde"] }
 uuid = { version = "1.26.1", features = ["v4"] }
-lettre = { version = "0.11", default-features = false, features = ["tokio1-rustls-tls", "smtp-transport", "builder"] }
-email_address = "0.2.9"
 fastrand = "2.5.0"
