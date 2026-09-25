@@ -1,4 +1,4 @@
-# 🎵 SIGNAL — Minimalist Web Audio Player & Smart Wave
+# 🎵 Recro — Minimalist Web Audio Player & Smart Wave
 
 [![Angular](https://img.shields.io/badge/Angular-19-dd0031.svg?style=flat-square&logo=angular)](https://angular.dev)
 [![Rust](https://img.shields.io/badge/Rust-Axum-dea584.svg?style=flat-square&logo=rust)](https://www.rust-lang.org)
@@ -6,7 +6,7 @@
 [![PWA](https://img.shields.io/badge/PWA-Ready-5A0FC8.svg?style=flat-square)](https://web.dev/progressive-web-apps/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
-**SIGNAL** — современный, быстрый и независимый аудиоплеер со встроенной «Моей Волной», каталогом онлайн-радио, мультиплатформенным поиском и поддержкой оффлайн-режима. Никакой рекламы, подписок, капч и необходимости использовать VPN: аудиопотоки обрабатываются напрямую высокопроизводительным бэкендом на Rust и транскодируются в реальном времени.
+**Recro** — современный, быстрый и независимый аудиоплеер со встроенной «Моей Волной», каталогом онлайн-радио, мультиплатформенным поиском и поддержкой оффлайн-режима. Никакой рекламы, подписок, капч и необходимости использовать VPN: аудиопотоки обрабатываются напрямую высокопроизводительным бэкендом на Rust и транскодируются в реальном времени.
 
 ---
 
@@ -14,6 +14,14 @@
 
 - **Веб-версия (Frontend):** [https://signal-frontend-production-a944.up.railway.app](https://signal-frontend-production-a944.up.railway.app)
 - **API Сервер (Backend):** [https://signal-audio-backend-production.up.railway.app](https://signal-audio-backend-production.up.railway.app)
+
+---
+
+## 📸 Интерфейс приложения
+
+| Десктопная версия (Web / PWA) | Мобильная адаптация |
+| :---: | :---: |
+| <img src="docs/screenshots/desktop_preview.png" alt="Recro Desktop Player" width="550"/> | <img src="docs/screenshots/mobile_preview.png" alt="Recro Mobile Player" width="220"/> |
 
 ---
 
@@ -64,8 +72,8 @@
 
 ```bash
 # Клонируйте репозиторий
-git clone https://github.com/Ren4ik7284/SIGNAL.git
-cd SIGNAL
+git clone https://github.com/Ren4ik7284/SIGNAL.git recro
+cd recro
 
 # Запустите сервисы
 docker compose up --build -d
@@ -153,7 +161,7 @@ npm start
 ## ⚙️ Структура проекта
 
 ```
-SIGNAL/
+recro/
 ├── backend/                  # Высокопроизводительный сервер на Rust (Axum)
 │   ├── src/
 │   │   ├── handlers/         # Обработчики API (поток, поиск, библиотека, авторизация)

@@ -321,7 +321,7 @@ export class App implements OnInit {
         }
       }, 60);
     } catch (err) {
-      console.warn('[SIGNAL GSI] Ошибка инициализации кнопки Google:', err);
+      console.warn('[Recro GSI] Ошибка инициализации кнопки Google:', err);
     }
   }
 

@@ -394,7 +394,7 @@ pub async fn extract_info(
 
 pub async fn execute_audius_search(query: &str, limit: usize, base_url: &str) -> Vec<SearchTrack> {
     let url = format!(
-        "https://discoveryprovider.audius.co/v1/tracks/search?query={}&app_name=SIGNAL_MUSIC&limit={}",
+        "https://discoveryprovider.audius.co/v1/tracks/search?query={}&app_name=RECRO_MUSIC&limit={}",
         urlencoding::encode(query),
         limit
     );
@@ -438,7 +438,7 @@ pub async fn execute_audius_search(query: &str, limit: usize, base_url: &str) ->
                 .or_else(|| item["artwork"]["150x150"].as_str())
                 .map(|u| u.to_string());
 
-            let direct_stream_url = format!("https://discoveryprovider.audius.co/v1/tracks/{}/stream?app_name=SIGNAL_MUSIC", id);
+            let direct_stream_url = format!("https://discoveryprovider.audius.co/v1/tracks/{}/stream?app_name=RECRO_MUSIC", id);
             let encoded_url = urlencoding::encode(&direct_stream_url);
             let encoded_title = urlencoding::encode(&title);
             let encoded_artist = urlencoding::encode(&artist);

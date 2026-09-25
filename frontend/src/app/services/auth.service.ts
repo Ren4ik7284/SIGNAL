@@ -218,7 +218,7 @@ export class AuthService {
 
       return true;
     } catch (e: any) {
-      console.error('[SIGNAL AUTH LOGIN ERROR]', e);
+      console.error('[Recro AUTH LOGIN ERROR]', e);
       this.authError.set('Не удалось подключиться к серверу');
       return false;
     } finally {
@@ -282,7 +282,7 @@ export class AuthService {
 
       return true;
     } catch (e: any) {
-      console.error('[SIGNAL AUTH REGISTER ERROR]', e);
+      console.error('[Recro AUTH REGISTER ERROR]', e);
       this.authError.set('Не удалось подключиться к серверу');
       return false;
     } finally {
@@ -308,7 +308,7 @@ export class AuthService {
         }
       }
     } catch (e) {
-      console.warn('[SIGNAL AUTH] Не удалось загрузить конфигурацию аутентификации:', e);
+      console.warn('[Recro AUTH] Не удалось загрузить конфигурацию аутентификации:', e);
     }
   }
 
@@ -358,7 +358,7 @@ export class AuthService {
 
       return true;
     } catch (e: any) {
-      console.error('[SIGNAL GOOGLE AUTH ERROR]', e);
+      console.error('[Recro GOOGLE AUTH ERROR]', e);
       this.authError.set('Не удалось подключиться к серверу для авторизации через Google');
       return false;
     } finally {

@@ -9,7 +9,7 @@ use crate::models::CoverParams;
 use crate::security::check_url_ssrf;
 
 pub async fn health_check() -> &'static str {
-    "SIGNAL // Rust Engine Online"
+    "Recro // Rust Engine Online"
 }
 
 pub async fn proxy_cover(Query(params): Query<CoverParams>) -> Result<Response, StatusCode> {

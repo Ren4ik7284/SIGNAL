@@ -174,7 +174,7 @@ pub async fn get_wrapped(
         g if g.contains("electron") || g.contains("synth") || g.contains("techno") => MusicPersonality {
             title: "Кибер-Архитектор".to_string(),
             tag: "#CYBER_SOUND".to_string(),
-            description: "Ваш пульс синхронизирован с синтезаторами и цифровым потоком SIGNAL.".to_string(),
+            description: "Ваш пульс синхронизирован с синтезаторами и цифровым потоком Recro.".to_string(),
         },
         g if g.contains("ambient") || g.contains("chill") || g.contains("lounge") => MusicPersonality {
             title: "Космический Дрейфующий".to_string(),
@@ -202,7 +202,7 @@ pub async fn get_wrapped(
                 MusicPersonality {
                     title: "Исследователь Частот".to_string(),
                     tag: "#EXPLORER".to_string(),
-                    description: "Вы только формируете свой звуковой почерк в экосистеме SIGNAL.".to_string(),
+                    description: "Вы только формируете свой звуковой почерк в экосистеме Recro.".to_string(),
                 }
             }
         }
