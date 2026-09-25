@@ -229,6 +229,14 @@ export class LibraryService implements OnDestroy {
   }
 
   private initLibrary() {
+    if (!this.authService.isAuthenticated()) {
+      this.tracks.set([]);
+      this.playlists.set([]);
+      this.activePlaylistId.set(null);
+      this.radioStations.set([...this.defaultRadioStations]);
+      return;
+    }
+
     let savedTracks: Track[] = [];
     try {
       const stored = localStorage.getItem(this.STORAGE_KEY_TRACKS);
@@ -609,14 +617,19 @@ export class LibraryService implements OnDestroy {
           ? data.radio_stations
           : [...this.defaultRadioStations];
 
-        const localBlobTracks = localTracks.filter((t) => t.audioUrl && t.audioUrl.startsWith('blob:'));
-        const mergedTracks = [
-          ...cloudTracks,
-          ...localBlobTracks.filter((b) => !cloudTracks.some((c) => c.id === b.id)),
-        ];
+        if (cloudTracks.length === 0 && localTracks.length > 0) {
+          await this.pushLibraryToBackend();
+          this.isCloudSynced.set(true);
+          return;
+        }
+
+        const localNonCloud = localTracks.filter(
+          (lt) => !cloudTracks.some((ct) => ct.id === lt.id || (ct.audioUrl && ct.audioUrl === lt.audioUrl))
+        );
+        const mergedTracks = [...cloudTracks, ...localNonCloud];
 
         this.tracks.set(mergedTracks);
-        this.playlists.set(cloudPlaylists);
+        this.playlists.set(cloudPlaylists.length > 0 ? cloudPlaylists : this.playlists());
         this.radioStations.set(cloudStations);
         this.saveLocalWithoutCloudSync();
         try {
@@ -1231,8 +1244,65 @@ export class LibraryService implements OnDestroy {
     this.tracks.set([]);
     this.playlists.set([]);
     this.activePlaylistId.set(null);
+
+    // 1. Проверяем наличие треков, добавленных до авторизации (в гостевом режиме)
+    let guestTracks: Track[] = [];
+    let guestPlaylists: Playlist[] = [];
+    let guestFavs: string[] = [];
+    try {
+      const gTr = localStorage.getItem('signal_tracks_guest') || localStorage.getItem('signal_tracks');
+      if (gTr) guestTracks = JSON.parse(gTr);
+      const gPl = localStorage.getItem('signal_playlists_guest') || localStorage.getItem('signal_playlists');
+      if (gPl) guestPlaylists = JSON.parse(gPl);
+      const gFav = localStorage.getItem('signal_favs_guest') || localStorage.getItem('signal_favs');
+      if (gFav) guestFavs = JSON.parse(gFav);
+    } catch {}
+
+    guestTracks = (guestTracks || []).filter((t) => !t.id.startsWith('default-track-'));
+
+    // 2. Загружаем локальный кэш вошедшего пользователя
     this.initLibrary();
+
+    // 3. Если были гостевые треки, мигрируем их в профиль пользователя
+    if (guestTracks.length > 0) {
+      const existingIds = new Set(this.tracks().map((t) => t.id));
+      const existingUrls = new Set(this.tracks().map((t) => t.audioUrl));
+      const toAdd = guestTracks
+        .filter((t) => !existingIds.has(t.id) && !existingUrls.has(t.audioUrl))
+        .map((t) => ({ ...t, isFavorite: guestFavs.includes(t.id) || t.isFavorite }));
+
+      if (toAdd.length > 0) {
+        this.tracks.update((cur) => [...cur, ...toAdd]);
+        this.persistTracks();
+      }
+
+      if (guestPlaylists.length > 0) {
+        const existingPlIds = new Set(this.playlists().map((p) => p.id));
+        const plToAdd = guestPlaylists.filter((p) => !existingPlIds.has(p.id));
+        if (plToAdd.length > 0) {
+          this.playlists.update((cur) => [...cur, ...plToAdd]);
+          this.persistPlaylists();
+        }
+      }
+    }
+
+    // 4. Очищаем гостевой кэш, чтобы при выходе из аккаунта музыка не оставалась
+    try {
+      localStorage.removeItem('signal_tracks_guest');
+      localStorage.removeItem('signal_tracks');
+      localStorage.removeItem('signal_favs_guest');
+      localStorage.removeItem('signal_favs');
+      localStorage.removeItem('signal_playlists_guest');
+      localStorage.removeItem('signal_playlists');
+    } catch {}
+
+    // 5. Синхронизируем с облачной базой данных
     await this.syncWithBackendOnStartup(true);
+
+    // 6. Если появились новые треки, сохраняем в облако
+    if (this.tracks().length > 0) {
+      await this.pushLibraryToBackend();
+    }
   }
 
   onUserLoggedOut() {
@@ -1241,6 +1311,14 @@ export class LibraryService implements OnDestroy {
     this.activePlaylistId.set(null);
     this.radioStations.set([...this.defaultRadioStations]);
     this.isCloudSynced.set(false);
-    this.initLibrary();
+
+    try {
+      localStorage.removeItem('signal_tracks_guest');
+      localStorage.removeItem('signal_tracks');
+      localStorage.removeItem('signal_favs_guest');
+      localStorage.removeItem('signal_favs');
+      localStorage.removeItem('signal_playlists_guest');
+      localStorage.removeItem('signal_playlists');
+    } catch {}
   }
 }
