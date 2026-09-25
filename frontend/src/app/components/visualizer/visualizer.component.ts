@@ -40,16 +40,17 @@ export class VisualizerComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly colorTheme = signal<VisualizerTheme>('mono');
   readonly sensitivity = signal<number>(1.2);
   readonly isFullscreen = signal<boolean>(false);
+  readonly circleDiameter = signal<number>(220);
+  readonly circleScale = signal<number>(1);
 
   private animationFrameId: number | null = null;
   private resizeObserver: ResizeObserver | null = null;
+  private smoothedPulse = 0;
 
-  // Audio data arrays (fftSize = 256 -> 128 bins)
   private readonly bufferLength = 128;
   private readonly freqData = new Uint8Array(this.bufferLength);
   private readonly timeData = new Uint8Array(this.bufferLength);
 
-  // Peak caps for bars
   private peakCaps: number[] = [];
   private capHoldFrames: number[] = [];
   private zeroDataStreak = 0;
@@ -358,65 +359,67 @@ export class VisualizerComponent implements OnInit, AfterViewInit, OnDestroy {
     const colors = this.getThemeColors(ctx, h);
     const centerX = w / 2;
     const centerY = h / 2;
-    const baseRadius = Math.min(w, h) * 0.22;
-    const numBars = 64;
+    const isMobile = w < 600 || h < 600;
+    const baseRadius = Math.max(70, Math.min(w, h) * (isMobile ? 0.28 : 0.23));
+    const numBars = isMobile ? 48 : 64;
     const sens = this.sensitivity();
 
-    // Bass energy for center pulse
     let bassSum = 0;
     for (let i = 0; i < 8; i++) {
       bassSum += this.freqData[i];
     }
-    const pulse = (bassSum / 8 / 255) * 14 * sens;
-    const currentRadius = baseRadius + pulse;
+    const targetPulse = (bassSum / 8 / 255) * (isMobile ? 8 : 14) * sens;
+    this.smoothedPulse = this.smoothedPulse * 0.8 + targetPulse * 0.2;
+    const currentRadius = baseRadius + this.smoothedPulse;
+
+    const diameter = Math.round(baseRadius * 2);
+    if (this.circleDiameter() !== diameter) {
+      this.circleDiameter.set(diameter);
+    }
+    const scale = 1 + (this.smoothedPulse / baseRadius) * 0.5;
+    this.circleScale.set(scale);
 
     ctx.save();
     ctx.translate(centerX, centerY);
 
-    // Inner ring
-    ctx.beginPath();
-    ctx.arc(0, 0, Math.max(10, currentRadius - 6), 0, Math.PI * 2);
-    ctx.strokeStyle = colors.secondary;
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-
     ctx.beginPath();
     ctx.arc(0, 0, currentRadius, 0, Math.PI * 2);
     ctx.strokeStyle = colors.primary;
-    ctx.shadowBlur = 0;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2.5;
+    ctx.shadowColor = colors.primary;
+    ctx.shadowBlur = 12;
     ctx.stroke();
+    ctx.shadowBlur = 0;
 
-    // Draw radial frequency spikes
     const angleStep = (Math.PI * 2) / numBars;
     const step = Math.max(1, Math.floor(this.bufferLength / numBars));
+    const maxSpike = Math.min(w, h) * (isMobile ? 0.18 : 0.22);
 
     for (let i = 0; i < numBars; i++) {
       const dataIdx = Math.min(this.bufferLength - 1, i * step);
       const val = Math.min(1.0, (this.freqData[dataIdx] / 255) * sens);
-      const spikeLen = Math.max(4, val * (Math.min(w, h) * 0.24));
+      const spikeLen = Math.max(3, val * maxSpike);
 
       const angle = i * angleStep - Math.PI / 2;
       const cos = Math.cos(angle);
       const sin = Math.sin(angle);
 
-      const x1 = cos * (currentRadius + 4);
-      const y1 = sin * (currentRadius + 4);
-      const x2 = cos * (currentRadius + 4 + spikeLen);
-      const y2 = sin * (currentRadius + 4 + spikeLen);
+      const x1 = cos * (currentRadius + 3);
+      const y1 = sin * (currentRadius + 3);
+      const x2 = cos * (currentRadius + 3 + spikeLen);
+      const y2 = sin * (currentRadius + 3 + spikeLen);
 
       ctx.beginPath();
       ctx.moveTo(x1, y1);
       ctx.lineTo(x2, y2);
       ctx.strokeStyle = colors.primary;
-      ctx.lineWidth = Math.max(2, (w / 500) * 2.2);
+      ctx.lineWidth = Math.max(2, (w / 500) * (isMobile ? 2.5 : 2.2));
       ctx.lineCap = 'round';
       ctx.stroke();
 
-      // Outer peak dot
-      if (val > 0.4) {
+      if (val > 0.45) {
         ctx.beginPath();
-        ctx.arc(cos * (currentRadius + spikeLen + 8), sin * (currentRadius + spikeLen + 8), 1.5, 0, Math.PI * 2);
+        ctx.arc(cos * (currentRadius + spikeLen + 7), sin * (currentRadius + spikeLen + 7), 1.5, 0, Math.PI * 2);
         ctx.fillStyle = colors.peak;
         ctx.fill();
       }

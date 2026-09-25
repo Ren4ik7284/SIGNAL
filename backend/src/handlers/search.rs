@@ -1,27 +1,62 @@
-use axum::{extract::Query, http::StatusCode, Json};
+use axum::{
+    extract::{ConnectInfo, Query, State},
+    http::{HeaderMap, StatusCode},
+    Json,
+};
 use std::collections::HashSet;
+use std::net::SocketAddr;
 use std::process::Stdio;
 use std::time::Duration;
 use tokio::io::AsyncBufReadExt;
 use tokio::process::Command;
 
-use crate::config::{get_base_url, get_yt_dlp_cmd, is_cloud_env, apply_yt_dlp_common_args, CLOUD_FALLBACK_URL};
+use crate::config::{apply_yt_dlp_common_args, get_base_url, get_yt_dlp_cmd, is_cloud_env, CLOUD_FALLBACK_URL};
 use crate::models::{ExtractParams, ExtractResponse, SearchParams, SearchTrack};
+use crate::security::{check_rate_limit, check_url_ssrf, get_client_ip};
 use crate::ytdlp::{execute_cloud_search, execute_yt_dlp_search, parse_track_json};
+use crate::AppState;
 
-pub async fn search_music(Query(params): Query<SearchParams>) -> Result<Json<Vec<SearchTrack>>, StatusCode> {
+pub async fn search_music(
+    State(state): State<AppState>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Query(params): Query<SearchParams>,
+) -> Result<Json<Vec<SearchTrack>>, StatusCode> {
+    let client_ip = get_client_ip(&headers, Some(addr));
+    check_rate_limit(
+        &state.endpoint_rate_limits,
+        &format!("search:{}", client_ip),
+        30,
+        60,
+    )?;
+
     let query = params.q.trim();
     if query.is_empty() {
         return Ok(Json(Vec::new()));
     }
 
+    let _permit = match tokio::time::timeout(
+        Duration::from_millis(2000),
+        state.heavy_process_semaphore.acquire(),
+    )
+    .await
+    {
+        Ok(Ok(permit)) => permit,
+        _ => return Err(StatusCode::TOO_MANY_REQUESTS),
+    };
+
     let yt_cmd = get_yt_dlp_cmd();
     let base_url = get_base_url();
     let is_direct_url = query.starts_with("http://") || query.starts_with("https://");
 
-    println!("[search] Performing search for: {}", query);
-
     if is_direct_url {
+        let is_trusted = query.contains("youtube.com")
+            || query.contains("youtu.be")
+            || query.contains("soundcloud.com");
+        if !is_trusted {
+            check_url_ssrf(query).await?;
+        }
+
         let mut tracks = execute_yt_dlp_search(&yt_cmd, query, 15, &base_url).await;
         if tracks.is_empty() && !is_cloud_env() {
             let cloud_tracks = execute_cloud_search(query, &base_url).await;
@@ -49,9 +84,7 @@ pub async fn search_music(Query(params): Query<SearchParams>) -> Result<Json<Vec
         }
     }
 
-    // If YouTube search was blocked / empty locally and we are not in cloud, try cloud search
     if combined.is_empty() && !is_cloud_env() {
-        println!("[search] Local YouTube search empty/blocked, querying cloud engine...");
         let cloud_tracks = execute_cloud_search(query, &base_url).await;
         for t in cloud_tracks {
             if seen_ids.insert(t.id.clone()) {
@@ -66,7 +99,6 @@ pub async fn search_music(Query(params): Query<SearchParams>) -> Result<Json<Vec
         }
     }
 
-    println!("[search] Found {} tracks for: {}", combined.len(), query);
     Ok(Json(combined))
 }
 
@@ -90,11 +122,43 @@ fn extract_video_id(url: &str) -> Option<String> {
     None
 }
 
-pub async fn extract_info(Query(params): Query<ExtractParams>) -> Result<Json<ExtractResponse>, StatusCode> {
+pub async fn extract_info(
+    State(state): State<AppState>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Query(params): Query<ExtractParams>,
+) -> Result<Json<ExtractResponse>, StatusCode> {
+    let client_ip = get_client_ip(&headers, Some(addr));
+    check_rate_limit(
+        &state.endpoint_rate_limits,
+        &format!("extract:{}", client_ip),
+        25,
+        60,
+    )?;
+
     let url = params.url.trim();
     if url.is_empty() || url.starts_with('-') {
         return Err(StatusCode::BAD_REQUEST);
     }
+
+    if url.starts_with("http://") || url.starts_with("https://") {
+        let is_trusted = url.contains("youtube.com")
+            || url.contains("youtu.be")
+            || url.contains("soundcloud.com");
+        if !is_trusted {
+            check_url_ssrf(url).await?;
+        }
+    }
+
+    let _permit = match tokio::time::timeout(
+        Duration::from_millis(2000),
+        state.heavy_process_semaphore.acquire(),
+    )
+    .await
+    {
+        Ok(Ok(permit)) => permit,
+        _ => return Err(StatusCode::TOO_MANY_REQUESTS),
+    };
 
     let yt_cmd = get_yt_dlp_cmd();
     let base_url = get_base_url();
@@ -105,7 +169,6 @@ pub async fn extract_info(Query(params): Query<ExtractParams>) -> Result<Json<Ex
     let mut chapter_tracks: Vec<SearchTrack> = Vec::new();
     let mut has_chapters = false;
 
-    // 1. If URL has a specific video, inspect it first (fast single-video lookup)
     if let Some(ref vid) = video_id_opt {
         let single_url = format!("https://www.youtube.com/watch?v={}", vid);
         let mut single_cmd = Command::new(&yt_cmd);
@@ -123,7 +186,6 @@ pub async fn extract_info(Query(params): Query<ExtractParams>) -> Result<Json<Ex
                 if let Ok(item) = serde_json::from_slice::<serde_json::Value>(&out.stdout) {
                     main_video = parse_track_json(&item, &base_url);
 
-                    // Check for video chapters (sub-tracks / timestamps)
                     if let Some(chapters) = item["chapters"].as_array() {
                         if !chapters.is_empty() {
                             for (i, ch) in chapters.iter().enumerate() {
@@ -156,8 +218,6 @@ pub async fn extract_info(Query(params): Query<ExtractParams>) -> Result<Json<Ex
         }
     }
 
-    // 2. Determine tracks to return:
-    // If video has chapters, chapter_tracks ARE the playlist tracks!
     if has_chapters && !chapter_tracks.is_empty() {
         let playlist_title = main_video.as_ref().map(|m| m.title.clone());
         return Ok(Json(ExtractResponse {
@@ -169,7 +229,6 @@ pub async fn extract_info(Query(params): Query<ExtractParams>) -> Result<Json<Ex
         }));
     }
 
-    // 3. Regular playlist extraction if URL has a playlist or if chapter extraction wasn't used
     let mut tracks = Vec::new();
     let mut playlist_title = None;
 
@@ -211,14 +270,12 @@ pub async fn extract_info(Query(params): Query<ExtractParams>) -> Result<Json<Ex
         }
     }
 
-    // If tracks were empty but we have main_video (e.g. single video URL), use main_video as the track
     if tracks.is_empty() {
         if let Some(ref mv) = main_video {
             tracks.push(mv.clone());
         }
     }
 
-    // Fallback to cloud extract if local extraction yielded 0 items
     if tracks.is_empty() && !is_cloud_env() {
         let cloud_url = format!("{}/api/extract?url={}", CLOUD_FALLBACK_URL, urlencoding::encode(url));
         if let Ok(client) = reqwest::Client::builder().timeout(Duration::from_secs(15)).build() {
@@ -246,7 +303,6 @@ pub async fn extract_info(Query(params): Query<ExtractParams>) -> Result<Json<Ex
         }
     }
 
-    // If tracks are empty and main_video is None, but we have a YouTube video ID, use oEmbed fallback
     if tracks.is_empty() && main_video.is_none() {
         if let Some(ref vid) = video_id_opt {
             let oembed_url = format!(
@@ -290,7 +346,6 @@ pub async fn extract_info(Query(params): Query<ExtractParams>) -> Result<Json<Ex
         }
     }
 
-    // If main_video is still missing, but tracks has items and URL has a video_id, find it in tracks or use first track
     if main_video.is_none() && !tracks.is_empty() {
         if let Some(ref vid) = video_id_opt {
             if let Some(found) = tracks.iter().find(|t| t.id == *vid) {

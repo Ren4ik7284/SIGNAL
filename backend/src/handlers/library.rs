@@ -5,11 +5,9 @@ use serde_json::{json, Value};
 use sqlx::Row;
 
 use crate::auth::extract_claims_from_headers;
+use crate::security::check_rate_limit;
 use crate::AppState;
 
-/// GET /api/sync — возвращает библиотеку текущего пользователя.
-/// Требует Authorization: Bearer <token>.
-/// Анонимные запросы получают 401 — никаких shared library.json!
 pub async fn get_library(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -29,7 +27,7 @@ pub async fn get_library(
     let track_rows = sqlx::query(
         r#"
         SELECT id, title, artist, album, duration, audio_url, cover_url, genre, format, bitrate,
-               plays, is_favorite, is_live_stream, is_local_upload, playlist_only, added_at
+               plays, is_favorite, is_live_stream, is_local_upload, is_offline, playlist_only, added_at
         FROM tracks
         WHERE user_id = ?
         ORDER BY rowid DESC
@@ -56,6 +54,7 @@ pub async fn get_library(
         let is_favorite: i64 = r.get("is_favorite");
         let is_live_stream: i64 = r.get("is_live_stream");
         let is_local_upload: i64 = r.get("is_local_upload");
+        let is_offline: i64 = r.try_get("is_offline").unwrap_or(0);
         let playlist_only: i64 = r.get("playlist_only");
         let added_at: Option<String> = r.get("added_at");
 
@@ -74,6 +73,7 @@ pub async fn get_library(
             "isFavorite": is_favorite == 1,
             "isLiveStream": is_live_stream == 1,
             "isLocalUpload": is_local_upload == 1,
+            "isOffline": is_offline == 1,
             "playlistOnly": playlist_only == 1,
             "addedAt": added_at.unwrap_or_default(),
         }));
@@ -152,9 +152,6 @@ pub async fn get_library(
     })))
 }
 
-/// POST /api/sync — сохраняет библиотеку пользователя.
-/// Требует Authorization: Bearer <token>.
-/// Использует транзакцию — данные либо сохраняются полностью, либо не сохраняются вовсе.
 pub async fn save_library(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -164,21 +161,27 @@ pub async fn save_library(
         .map_err(|(code, msg)| (code, Json(json!({ "error": msg }))))?;
     let user_id = claims.sub;
 
+    check_rate_limit(
+        &state.endpoint_rate_limits,
+        &format!("sync_save:{}", user_id),
+        20,
+        60,
+    )
+    .map_err(|c| (c, Json(json!({ "error": "Слишком частые сохранения библиотеки" }))))?;
+
     let updated_at = data
         .get("updated_at")
         .and_then(|v| v.as_i64())
         .unwrap_or_else(|| chrono::Utc::now().timestamp_millis());
 
-    // Открываем транзакцию — либо всё сохраняется, либо ничего
     let mut tx = state.pool.begin().await.map_err(|e| {
-        eprintln!("[SIGNAL SYNC] Ошибка начала транзакции: {}", e);
+        eprintln!("Transaction start error: {}", e);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "error": "Ошибка базы данных" })),
         )
     })?;
 
-    // Обновляем метаданные синка
     sqlx::query(
         r#"
         INSERT INTO user_sync_meta (user_id, updated_at)
@@ -197,8 +200,14 @@ pub async fn save_library(
         )
     })?;
 
-    // Сохраняем треки
     if let Some(tracks_arr) = data.get("tracks").and_then(|v| v.as_array()) {
+        if tracks_arr.len() > 3000 {
+            return Err((
+                StatusCode::PAYLOAD_TOO_LARGE,
+                Json(json!({ "error": "Превышен лимит количества треков (максимум 3000)" })),
+            ));
+        }
+
         sqlx::query("DELETE FROM tracks WHERE user_id = ?")
             .bind(&user_id)
             .execute(&mut *tx)
@@ -225,6 +234,7 @@ pub async fn save_library(
             let is_fav = if item.get("isFavorite").and_then(|v| v.as_bool()).unwrap_or(false) { 1 } else { 0 };
             let is_live = if item.get("isLiveStream").and_then(|v| v.as_bool()).unwrap_or(false) { 1 } else { 0 };
             let is_upload = if item.get("isLocalUpload").and_then(|v| v.as_bool()).unwrap_or(false) { 1 } else { 0 };
+            let is_offline = if item.get("isOffline").and_then(|v| v.as_bool()).unwrap_or(false) { 1 } else { 0 };
             let is_pl_only = if item.get("playlistOnly").and_then(|v| v.as_bool()).unwrap_or(false) { 1 } else { 0 };
             let added_at = item.get("addedAt").and_then(|v| v.as_str()).unwrap_or_default();
 
@@ -232,8 +242,8 @@ pub async fn save_library(
                 sqlx::query(
                     r#"
                     INSERT OR REPLACE INTO tracks
-                    (id, user_id, title, artist, album, duration, audio_url, cover_url, genre, format, bitrate, plays, is_favorite, is_live_stream, is_local_upload, playlist_only, added_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (id, user_id, title, artist, album, duration, audio_url, cover_url, genre, format, bitrate, plays, is_favorite, is_live_stream, is_local_upload, is_offline, playlist_only, added_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     "#,
                 )
                 .bind(id)
@@ -251,12 +261,12 @@ pub async fn save_library(
                 .bind(is_fav)
                 .bind(is_live)
                 .bind(is_upload)
+                .bind(is_offline)
                 .bind(is_pl_only)
                 .bind(added_at)
                 .execute(&mut *tx)
                 .await
-                .map_err(|e| {
-                    eprintln!("[SIGNAL SYNC] Ошибка вставки трека {}: {}", id, e);
+                .map_err(|_| {
                     (
                         StatusCode::INTERNAL_SERVER_ERROR,
                         Json(json!({ "error": "Ошибка сохранения трека" })),
@@ -266,8 +276,14 @@ pub async fn save_library(
         }
     }
 
-    // Сохраняем плейлисты
     if let Some(pl_arr) = data.get("playlists").and_then(|v| v.as_array()) {
+        if pl_arr.len() > 300 {
+            return Err((
+                StatusCode::PAYLOAD_TOO_LARGE,
+                Json(json!({ "error": "Превышен лимит количества плейлистов (максимум 300)" })),
+            ));
+        }
+
         sqlx::query("DELETE FROM playlists WHERE user_id = ?")
             .bind(&user_id)
             .execute(&mut *tx)
@@ -313,8 +329,14 @@ pub async fn save_library(
         }
     }
 
-    // Сохраняем радиостанции
     if let Some(st_arr) = data.get("radio_stations").and_then(|v| v.as_array()) {
+        if st_arr.len() > 300 {
+            return Err((
+                StatusCode::PAYLOAD_TOO_LARGE,
+                Json(json!({ "error": "Превышен лимит радиостанций (максимум 300)" })),
+            ));
+        }
+
         sqlx::query("DELETE FROM radio_stations WHERE user_id = ?")
             .bind(&user_id)
             .execute(&mut *tx)
@@ -364,9 +386,8 @@ pub async fn save_library(
         }
     }
 
-    // Фиксируем транзакцию — только теперь данные реально сохранены
     tx.commit().await.map_err(|e| {
-        eprintln!("[SIGNAL SYNC] Ошибка коммита транзакции: {}", e);
+        eprintln!("Transaction commit error: {}", e);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "error": "Ошибка сохранения библиотеки" })),

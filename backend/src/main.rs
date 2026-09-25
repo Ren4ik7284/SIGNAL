@@ -3,6 +3,7 @@ mod config;
 mod db;
 mod handlers;
 mod models;
+mod security;
 mod ytdlp;
 
 use axum::routing::{get, post};
@@ -24,27 +25,20 @@ use handlers::search::{extract_info, search_music};
 use handlers::stats::get_wrapped;
 use handlers::stream::stream_audio;
 
-/// Состояние rate-limiting для эндпоинта логина.
-/// Ключ: "IP:login", значение: (кол-во попыток, время первой попытки в окне)
 pub type LoginAttempts = Arc<Mutex<HashMap<String, (u32, Instant)>>>;
+pub type EndpointRateLimits = Arc<Mutex<HashMap<String, (u32, Instant)>>>;
 
 #[derive(Clone)]
 pub struct AppState {
     pub pool: DbPool,
     pub login_attempts: LoginAttempts,
+    pub endpoint_rate_limits: EndpointRateLimits,
+    pub heavy_process_semaphore: Arc<tokio::sync::Semaphore>,
 }
 
 #[tokio::main]
 async fn main() {
-    // Предупреждение если JWT секрет не задан
-    if std::env::var("JWT_SECRET").is_err() {
-        eprintln!("[SIGNAL WARN] JWT_SECRET не задан! Используется дефолтный ключ — НЕБЕЗОПАСНО для продакшена. Задайте переменную окружения JWT_SECRET.");
-    }
-
-    // Initialize cookies from env variable immediately
     init_cookies_from_env();
-
-    // Refresh cookies in background — don't block server startup
     tokio::spawn(ensure_cookies_on_start());
 
     let pool = match init_db().await {
@@ -58,10 +52,10 @@ async fn main() {
     let state = AppState {
         pool,
         login_attempts: Arc::new(Mutex::new(HashMap::new())),
+        endpoint_rate_limits: Arc::new(Mutex::new(HashMap::new())),
+        heavy_process_semaphore: Arc::new(tokio::sync::Semaphore::new(8)),
     };
 
-    // CORS: разрешаем любые origins (self-hosted), но без credentials cookie
-    // Для продакшена с фиксированным доменом задайте ALLOWED_ORIGINS=https://yourdomain.com
     let cors = if let Ok(origins_str) = std::env::var("ALLOWED_ORIGINS") {
         let allowed: Vec<axum::http::HeaderValue> = origins_str
             .split(',')
@@ -94,7 +88,6 @@ async fn main() {
         .route("/api/search", get(search_music))
         .route("/api/extract", get(extract_info))
         .route("/api/stream", get(stream_audio))
-        // Лимит тела запроса: 5 МБ для /api/sync, защита от огромных payload
         .layer(RequestBodyLimitLayer::new(5 * 1024 * 1024))
         .layer(cors)
         .with_state(state);
@@ -117,7 +110,7 @@ async fn main() {
         }
     };
 
-    if let Err(e) = axum::serve(listener, app).await {
+    if let Err(e) = axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await {
         eprintln!("Server error: {}", e);
     }
 }

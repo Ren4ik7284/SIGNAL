@@ -31,11 +31,7 @@ pub fn init_cookies_from_env() {
             } else {
                 "cookies.txt"
             };
-            if let Err(e) = std::fs::write(target, trimmed.as_bytes()) {
-                eprintln!("[SIGNAL] Failed to write YT_COOKIES to {}: {}", target, e);
-            } else {
-                println!("[SIGNAL] Successfully saved cookies from YT_COOKIES env var to {}", target);
-            }
+            let _ = std::fs::write(target, trimmed.as_bytes());
         }
     }
 }
@@ -82,11 +78,9 @@ pub fn has_chromium_profile() -> bool {
 
 pub fn apply_yt_dlp_common_args(cmd: &mut Command) {
     cmd.stdin(Stdio::null());
-    // Keep stderr for server-side debug logs; caller can suppress if needed
     cmd.stderr(Stdio::inherit());
     cmd.args([
         "--no-warnings",
-        "--no-check-certificates",
     ]);
     if let Ok(proxy) = std::env::var("YOUTUBE_PROXY") {
         let p = proxy.trim();
@@ -94,26 +88,22 @@ pub fn apply_yt_dlp_common_args(cmd: &mut Command) {
             cmd.arg("--proxy").arg(p);
         }
     }
-    // If explicitly specified by environment variable, respect that first
     if let Ok(env_cookies) = std::env::var("YT_COOKIES_PATH") {
         if Path::new(&env_cookies).exists() {
             cmd.arg("--cookies").arg(env_cookies);
             return;
         }
     }
-    // Prefer cookies file (instant lookup) over --cookies-from-browser (which takes ~30s and triggers timeouts)
     if let Some(cookies) = get_cookies_path() {
         cmd.arg("--cookies").arg(cookies);
     }
 }
 
-/// Same as apply_yt_dlp_common_args but skips cookies — used as fallback when cookies fail
 pub fn apply_yt_dlp_common_args_no_cookies(cmd: &mut Command) {
     cmd.stdin(Stdio::null());
     cmd.stderr(Stdio::inherit());
     cmd.args([
         "--no-warnings",
-        "--no-check-certificates",
     ]);
     if let Ok(proxy) = std::env::var("YOUTUBE_PROXY") {
         let p = proxy.trim();
@@ -125,15 +115,12 @@ pub fn apply_yt_dlp_common_args_no_cookies(cmd: &mut Command) {
 
 pub async fn ensure_cookies_on_start() {
     if !has_chromium_profile() {
-        println!("[SIGNAL] Running in container or without Chromium profile, skipping cookie auto-export.");
         return;
     }
     let yt_cmd = get_yt_dlp_cmd();
     let home = std::env::var("HOME").unwrap_or_default();
-    // Write to the canonical path that get_cookies_path() prefers
     let cookies_path = format!("{}/music-player/backend/cookies.txt", home);
-    println!("[SIGNAL] Chromium profile detected. Refreshing cookies.txt from chromium → {}", cookies_path);
-    let res = Command::new(&yt_cmd)
+    let _ = Command::new(&yt_cmd)
         .args([
             "--cookies",
             &cookies_path,
@@ -146,14 +133,6 @@ pub async fn ensure_cookies_on_start() {
         ])
         .output()
         .await;
-    match res {
-        Ok(out) if out.status.success() => {
-            println!("[SIGNAL] Successfully refreshed YouTube cookies from chromium!");
-        }
-        _ => {
-            println!("[SIGNAL] Note: unable to auto-export cookies from chromium.");
-        }
-    }
 }
 
 pub fn get_base_url() -> String {

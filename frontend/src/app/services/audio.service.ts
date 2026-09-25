@@ -2,6 +2,7 @@ import { Injectable, signal, computed, inject } from '@angular/core';
 import { Track } from '../models/track.model';
 import { LibraryService } from './library.service';
 import { OfflineService } from './offline.service';
+import { RecommendationService, MixMood } from './recommendation.service';
 
 @Injectable({
   providedIn: 'root',
@@ -9,6 +10,7 @@ import { OfflineService } from './offline.service';
 export class AudioService {
   private libraryService = inject(LibraryService);
   private offlineService = inject(OfflineService);
+  readonly recService = inject(RecommendationService);
   private audio: HTMLAudioElement;
 
   // Web Audio API Nodes for Normalization & Crossfade & Visualizer
@@ -37,6 +39,8 @@ export class AudioService {
 
   private isHandlingEnd = false;
   private isFadingOut = false;
+  private hasRecordedCompletion = false;
+  private isReplenishingQueue = false;
 
   readonly progressPercent = computed(() => {
     const d = this.duration();
@@ -243,6 +247,18 @@ export class AudioService {
         this.applyFadeOut(2.2);
       }
 
+      // Record track completion at 80% of playback
+      const cur = this.currentTrack();
+      if (cur && total > 10 && actual >= total * 0.8 && !this.hasRecordedCompletion) {
+        this.hasRecordedCompletion = true;
+        this.recService.recordTrackCompletion(cur);
+      }
+
+      // Proactively ensure smart queue before current track ends
+      if (this.recService.isMixActive() && total > 15 && actual >= total - 12) {
+        this.ensureSmartQueue();
+      }
+
       if (total > 0 && actual >= total - 0.5 && this.isPlaying()) {
         this.handleTrackEnded();
       }
@@ -447,6 +463,7 @@ export class AudioService {
     this.currentTrack.set(track);
     this.streamSeekOffset.set(0);
     this.currentTime.set(0);
+    this.hasRecordedCompletion = false;
 
     const initialDuration = track.duration && track.duration > 0 ? track.duration : 0;
     this.duration.set(initialDuration);
@@ -635,13 +652,28 @@ export class AudioService {
     const q = this.queue();
     if (q.length === 0) return;
 
+    const cur = this.currentTrack();
+    if (cur && this.currentTime() < 15 && !this.isLiveStream()) {
+      this.recService.recordTrackSkip(cur);
+    }
+
     let nextIdx = this.queueIndex() + 1;
     if (this.isShuffle()) {
       nextIdx = Math.floor(Math.random() * q.length);
     }
 
     if (nextIdx >= q.length) {
-      if (this.repeatMode() === 'all') {
+      if (this.recService.isMixActive()) {
+        await this.ensureSmartQueue();
+        const updatedQ = this.queue();
+        if (nextIdx >= updatedQ.length) {
+          if (this.repeatMode() === 'all') {
+            nextIdx = 0;
+          } else {
+            return;
+          }
+        }
+      } else if (this.repeatMode() === 'all') {
         nextIdx = 0;
       } else {
         return;
@@ -652,7 +684,11 @@ export class AudioService {
     await this.applyFadeOut(0.18);
 
     this.queueIndex.set(nextIdx);
-    this.playTrack(q[nextIdx]);
+    this.playTrack(this.queue()[nextIdx]);
+
+    if (this.recService.isMixActive()) {
+      this.ensureSmartQueue();
+    }
   }
 
   async prev() {
@@ -741,5 +777,75 @@ export class AudioService {
   clearQueue() {
     this.queue.set(this.currentTrack() ? [this.currentTrack()!] : []);
     this.queueIndex.set(0);
+  }
+
+  async ensureSmartQueue() {
+    if (!this.recService.isMixActive() || this.isReplenishingQueue) return;
+    const q = this.queue();
+    const idx = this.queueIndex();
+    if (idx < q.length - 2) return;
+
+    this.isReplenishingQueue = true;
+    try {
+      const existingIds = new Set(q.map((t) => t.id));
+      const nextCandidates = this.recService.pickNextTracks(2, existingIds);
+
+      // 70/30 rule: if we need more or every few tracks, fetch 1-2 discovery tracks from online
+      if (nextCandidates.length < 2 || Math.random() < 0.35) {
+        const discovery = await this.recService.fetchOnlineDiscoveryTracks(2, existingIds);
+        for (const d of discovery) {
+          nextCandidates.push(d);
+          existingIds.add(d.id);
+        }
+      }
+
+      if (nextCandidates.length > 0) {
+        this.queue.update((curQ) => [...curQ, ...nextCandidates]);
+      }
+    } finally {
+      this.isReplenishingQueue = false;
+    }
+  }
+
+  async startSmartMix(mood: MixMood = 'all'): Promise<boolean> {
+    this.recService.isMixActive.set(true);
+    this.recService.currentMood.set(mood);
+
+    const candidates = this.recService.pickNextTracks(5);
+    if (candidates.length === 0) {
+      const discovery = await this.recService.fetchOnlineDiscoveryTracks(5);
+      if (discovery.length === 0) {
+        this.recService.isMixActive.set(false);
+        return false;
+      }
+      this.playTrack(discovery[0], discovery);
+      return true;
+    }
+
+    this.playTrack(candidates[0], candidates);
+    this.ensureSmartQueue();
+    return true;
+  }
+
+  stopSmartMix() {
+    this.recService.isMixActive.set(false);
+  }
+
+  setMixMood(mood: MixMood) {
+    this.recService.currentMood.set(mood);
+    if (this.recService.isMixActive()) {
+      const q = this.queue();
+      const idx = this.queueIndex();
+      const played = q.slice(0, idx + 1);
+      const newNext = this.recService.pickNextTracks(4, new Set(played.map((t) => t.id)));
+      this.queue.set([...played, ...newNext]);
+    }
+  }
+
+  dislikeCurrentTrack() {
+    const cur = this.currentTrack();
+    if (!cur) return;
+    this.recService.dislikeTrack(cur.id);
+    this.next();
   }
 }

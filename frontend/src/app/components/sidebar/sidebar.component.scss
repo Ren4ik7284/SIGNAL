@@ -93,7 +93,43 @@
           color: #fff;
         }
       }
+
+      &.smart-wave-item {
+        color: var(--text-primary);
+        position: relative;
+        overflow: hidden;
+
+        .wave-icon {
+          color: #38bdf8;
+          transition: transform 0.2s ease;
+        }
+
+        .wave-anim {
+          animation: wavePulse 1.4s ease-in-out infinite alternate;
+        }
+
+        .wave-active-badge {
+          color: #38bdf8;
+          background: rgba(56, 189, 248, 0.12);
+          border: 1px solid rgba(56, 189, 248, 0.35);
+          padding: 1px 6px;
+          border-radius: 4px;
+          font-weight: 700;
+          font-size: 9px;
+        }
+
+        &.active {
+          background: linear-gradient(90deg, rgba(56, 189, 248, 0.14) 0%, rgba(34, 197, 94, 0.08) 100%);
+          border-color: rgba(56, 189, 248, 0.3);
+          color: #fff;
+        }
+      }
     }
+  }
+
+  @keyframes wavePulse {
+    0% { transform: scaleY(0.85); opacity: 0.8; }
+    100% { transform: scaleY(1.15); opacity: 1; }
   }
 
   .playlists-section {

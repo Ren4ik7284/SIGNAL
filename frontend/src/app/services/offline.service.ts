@@ -118,19 +118,14 @@ export class OfflineService {
     }
   }
 
-  /**
-   * Сохраняет готовый Blob (например, загруженный локальный файл) в постоянный кэш офлайн.
-   */
   async saveBlobOffline(track: Track, blob: Blob): Promise<boolean> {
     try {
-      // 1. Сохраняем в IndexedDB (надежно на мобильных)
       try {
         await idbPutBlob(track.id, blob);
       } catch (e) {
         console.warn('[OfflineService] IndexedDB save failed, fallback to Cache API:', e);
       }
 
-      // 2. Также сохраняем в Cache API
       if (typeof window !== 'undefined' && 'caches' in window) {
         try {
           const cache = await caches.open(this.CACHE_NAME);
@@ -177,7 +172,6 @@ export class OfflineService {
       let audioUrl = track.audioUrl;
       const backendBase = this.getBackendBaseUrl();
 
-      // Resolve relative and absolute URLs to the active backend URL
       if (!audioUrl.startsWith('blob:')) {
         if (audioUrl.startsWith('/api/stream')) {
           audioUrl = `${backendBase}${audioUrl}`;
@@ -194,7 +188,6 @@ export class OfflineService {
           audioUrl = `${backendBase}${audioUrl.startsWith('/') ? '' : '/'}${audioUrl}`;
         }
 
-        // Add title/artist metadata to stream URL for better backend resolution
         if (audioUrl.includes('/api/stream')) {
           if (!audioUrl.includes('title=') && track.title) {
             const glue = audioUrl.includes('?') ? '&' : '?';
@@ -214,14 +207,12 @@ export class OfflineService {
 
       const blob = await resp.blob();
 
-      // 1. Сохраняем в IndexedDB (гарантирует воспроизведение на iOS Safari и Android)
       try {
         await idbPutBlob(track.id, blob);
       } catch (e) {
         console.warn('[OfflineService] IndexedDB save error:', e);
       }
 
-      // 2. Сохраняем в Cache API
       if ('caches' in window) {
         try {
           const cache = await caches.open(this.CACHE_NAME);
@@ -237,7 +228,6 @@ export class OfflineService {
         } catch {}
       }
 
-      // 3. Сохраняем метаданные в local storage
       const existing = this.getOfflineTracks().filter((t) => t.id !== track.id);
       const updatedTrack: Track = { ...track, isOffline: true };
       existing.push(updatedTrack);
@@ -289,7 +279,6 @@ export class OfflineService {
     }
 
     try {
-      // 1. Сначала проверяем IndexedDB
       const blob = await idbGetBlob(trackId);
       if (blob) {
         if (this.activeBlobUrl) {
@@ -299,14 +288,12 @@ export class OfflineService {
         return this.activeBlobUrl;
       }
 
-      // 2. Фолбэк на Cache API
       if ('caches' in window) {
         const cache = await caches.open(this.CACHE_NAME);
         const cacheKey = `/offline-audio/${trackId}`;
         const match = await cache.match(cacheKey);
         if (match) {
           const b = await match.blob();
-          // Мигрируем в IndexedDB для будущей скорости
           idbPutBlob(trackId, b).catch(() => {});
           if (this.activeBlobUrl) {
             URL.revokeObjectURL(this.activeBlobUrl);

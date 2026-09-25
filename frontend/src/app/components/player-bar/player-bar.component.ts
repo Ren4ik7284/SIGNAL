@@ -22,6 +22,7 @@ export class PlayerBarComponent {
 
   @Output() toggleQueueDrawer = new EventEmitter<void>();
   @Output() expandMobilePlayer = new EventEmitter<void>();
+  @Output() openAddToPlaylist = new EventEmitter<Track>();
 
   onLeftClick() {
     if (typeof window !== 'undefined' && window.innerWidth <= 768) {
@@ -29,11 +30,23 @@ export class PlayerBarComponent {
     }
   }
 
+  toggleFavorite(track: Track) {
+    this.libraryService.toggleFavorite(track.id, track);
+    if (!track.isFavorite) {
+      this.audioService.recService.recordTrackLike(track);
+    }
+  }
+
   async toggleOfflineTrack(track: Track) {
     if (this.offlineService.isTrackOffline(track.id)) {
       await this.offlineService.removeTrackOffline(track.id);
+      this.libraryService.updateTrackOfflineStatus(track.id, false);
     } else {
-      await this.offlineService.saveTrackOffline(track);
+      const ok = await this.offlineService.saveTrackOffline(track);
+      if (ok) {
+        this.libraryService.addTrackToLibrary(track);
+        this.libraryService.updateTrackOfflineStatus(track.id, true);
+      }
     }
   }
 

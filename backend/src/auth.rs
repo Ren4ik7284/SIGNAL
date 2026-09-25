@@ -54,17 +54,16 @@ fn get_jwt_secret() -> &'static [u8] {
     DYNAMIC_JWT_SECRET.get_or_init(|| {
         if let Ok(val) = std::env::var("JWT_SECRET") {
             let trimmed = val.trim();
-            if !trimmed.is_empty() {
+            if !trimmed.is_empty() && trimmed != "super_secret_jwt_random_key_replace_in_prod" {
                 return trimmed.as_bytes().to_vec();
             }
         }
-        let random_secret: String = (0..32)
+        let random_secret: String = (0..64)
             .map(|_| {
                 const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()-_=+";
                 CHARSET[fastrand::usize(..CHARSET.len())] as char
             })
             .collect();
-        eprintln!("[SIGNAL SECURITY] JWT_SECRET не задан в ENV — сгенерирован случайный криптостойкий ключ сессии.");
         random_secret.into_bytes()
     })
 }
@@ -176,9 +175,9 @@ mod tests {
     fn test_validate_username() {
         assert!(validate_username("alex_123").is_ok());
         assert!(validate_username("john-doe").is_ok());
-        assert!(validate_username("al").is_err()); // too short
-        assert!(validate_username("alex smith").is_err()); // has space
-        assert!(validate_username("alex@smith").is_err()); // invalid char
+        assert!(validate_username("al").is_err());
+        assert!(validate_username("alex smith").is_err());
+        assert!(validate_username("alex@smith").is_err());
     }
 
     #[test]

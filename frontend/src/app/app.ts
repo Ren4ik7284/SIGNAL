@@ -18,6 +18,7 @@ import { PlayerBarComponent } from './components/player-bar/player-bar.component
 import { VisualizerComponent } from './components/visualizer/visualizer.component';
 import { OfflineService } from './services/offline.service';
 import { AuthService, HistoryItem, WrappedStats } from './services/auth.service';
+import { RecommendationService, MixMood } from './services/recommendation.service';
 
 declare global {
   interface Window {
@@ -38,6 +39,9 @@ export class App implements OnInit {
   readonly libraryService = inject(LibraryService);
   readonly offlineService = inject(OfflineService);
   readonly authService = inject(AuthService);
+  readonly recService = inject(RecommendationService);
+
+  readonly isQuickStartMixModalOpen = signal<boolean>(false);
 
   readonly isAuthModalOpen = signal<boolean>(false);
   readonly authModalTab = signal<'login' | 'register'>('login');
@@ -506,7 +510,13 @@ export class App implements OnInit {
 
   toggleFavorite(track: Track, event?: Event) {
     if (event) event.stopPropagation();
-    this.libraryService.toggleFavorite(track.id);
+    this.libraryService.toggleFavorite(track.id, track);
+    if (!track.isFavorite) {
+      this.recService.recordTrackLike(track);
+      this.showToast('Добавлено в избранное');
+    } else {
+      this.showToast('Удалено из избранного');
+    }
   }
 
   addToQueue(track: Track, event?: Event) {
@@ -524,6 +534,7 @@ export class App implements OnInit {
   toggleTrackInPlaylistFromModal(playlist: Playlist) {
     const track = this.targetTrackForPlaylist();
     if (!track) return;
+    this.libraryService.addTrackToLibrary({ ...track, playlistOnly: false });
     const isAdded = this.libraryService.toggleTrackInPlaylist(playlist.id, track.id);
     this.showToast(
       isAdded
@@ -573,16 +584,70 @@ export class App implements OnInit {
 
     if (this.offlineService.isTrackOffline(track.id)) {
       await this.offlineService.removeTrackOffline(track.id);
+      this.libraryService.updateTrackOfflineStatus(track.id, false);
       this.showToast('Трек удалён из оффлайн-хранилища');
     } else {
       this.showToast('Загрузка трека в кэш...');
       const ok = await this.offlineService.saveTrackOffline(track);
       if (ok) {
+        this.libraryService.addTrackToLibrary(track);
+        this.libraryService.updateTrackOfflineStatus(track.id, true);
         this.showToast('Трек сохранён для оффлайн-прослушивания!');
       } else {
         this.showToast('Ошибка при загрузке трека');
       }
     }
+  }
+
+  async toggleSmartMix(mood: MixMood = 'all') {
+    const isCurrentlyActive = this.recService.isMixActive();
+    const currentMood = this.recService.currentMood();
+
+    if (isCurrentlyActive && currentMood === mood) {
+      this.audioService.togglePlay();
+      return;
+    }
+
+    if (isCurrentlyActive && currentMood !== mood) {
+      this.audioService.setMixMood(mood);
+      const moodNames: Record<MixMood, string> = {
+        all: 'Все стили',
+        energetic: 'Бодрый вайб',
+        chill: 'Спокойный чилл',
+        favorites: 'Только любимое',
+      };
+      this.showToast(`Режим волны: ${moodNames[mood]}`);
+      return;
+    }
+
+    const localCandidates = this.recService.getAllLocalCandidates();
+    if (localCandidates.length === 0) {
+      this.isQuickStartMixModalOpen.set(true);
+      return;
+    }
+
+    this.showToast('Запуск Моей Волны...');
+    const ok = await this.audioService.startSmartMix(mood);
+    if (!ok) {
+      this.isQuickStartMixModalOpen.set(true);
+    }
+  }
+
+  async selectQuickStartVibe(vibe: 'phonk' | 'hiphop' | 'rock' | 'lofi' | 'pop' | 'indie') {
+    this.recService.setQuickStartVibe(vibe);
+    this.isQuickStartMixModalOpen.set(false);
+    this.showToast('Подбираем треки под выбранный стиль...');
+    const ok = await this.audioService.startSmartMix('all');
+    if (ok) {
+      this.showToast('Волна запущена!');
+    }
+  }
+
+  dislikeCurrentTrack() {
+    const cur = this.audioService.currentTrack();
+    if (!cur) return;
+    this.audioService.dislikeCurrentTrack();
+    this.showToast(`Трек "${cur.title}" скрыт и не будет звучать`);
   }
 
   async triggerOnlineSearch() {

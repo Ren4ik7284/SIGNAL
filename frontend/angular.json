@@ -32,7 +32,17 @@
             ],
             "styles": [
               "src/styles.scss"
-            ]
+            ],
+            "optimization": {
+              "scripts": true,
+              "styles": {
+                "minify": true,
+                "inlineCritical": false
+              },
+              "fonts": {
+                "inline": false
+              }
+            }
           },
           "configurations": {
             "production": {

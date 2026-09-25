@@ -6,6 +6,7 @@ use serde_json::{json, Value};
 use sqlx::Row;
 
 use crate::auth::extract_claims_from_headers;
+use crate::security::check_rate_limit;
 use crate::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -39,6 +40,14 @@ pub async fn record_play(
         (code, Json(json!({ "error": msg })))
     })?;
 
+    check_rate_limit(
+        &state.endpoint_rate_limits,
+        &format!("history_record:{}", claims.sub),
+        60,
+        60,
+    )
+    .map_err(|c| (c, Json(json!({ "error": "Превышен лимит запросов истории" }))))?;
+
     let played_at = chrono::Utc::now().timestamp();
 
     sqlx::query(
@@ -69,6 +78,22 @@ pub async fn record_play(
         .bind(&payload.track_id)
         .execute(&state.pool)
         .await;
+
+    let _ = sqlx::query(
+        r#"
+        DELETE FROM listening_history
+        WHERE user_id = ? AND id NOT IN (
+            SELECT id FROM listening_history
+            WHERE user_id = ?
+            ORDER BY played_at DESC
+            LIMIT 500
+        )
+        "#,
+    )
+    .bind(&claims.sub)
+    .bind(&claims.sub)
+    .execute(&state.pool)
+    .await;
 
     Ok(StatusCode::OK)
 }

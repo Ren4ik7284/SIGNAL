@@ -12,6 +12,7 @@
     <app-sidebar
       [activeTab]="activeTab()"
       (viewChange)="setView($any($event.view), $event.playlistId)"
+      (triggerSmartMix)="toggleSmartMix()"
       (createPlaylist)="openCreatePlaylistModal()"
       (openWrapped)="openWrappedModal()"
       (openHistory)="openHistoryModal()"
@@ -122,6 +123,124 @@
                   {{ g === 'all' ? 'Все жанры' : g }}
                 </button>
               }
+            </div>
+          }
+
+          <!-- Smart Wave Hero Card (Моя Волна) -->
+          @if (activeTab() === 'all') {
+            <div class="smart-wave-card" [class.wave-active]="recService.isMixActive()">
+              <div class="wave-card-glow"></div>
+              <div class="wave-card-content">
+                <div class="wave-left-col">
+                  <div class="wave-avatar-pulse" (click)="toggleSmartMix(recService.currentMood())" title="Запустить волну">
+                    <div class="wave-bars-icon" [class.animating]="recService.isMixActive() && audioService.isPlaying()">
+                      <span></span><span></span><span></span><span></span><span></span>
+                    </div>
+                  </div>
+
+                  <div class="wave-info">
+                    <div class="wave-meta-top">
+                      <span class="wave-tag font-mono">
+                        @if (recService.isMixActive() && audioService.isPlaying()) {
+                          В ЭФИРЕ • LIVE
+                        } @else {
+                          ПЕРСОНАЛЬНЫЙ ПОТОК
+                        }
+                      </span>
+                      @if (recService.isFetchingDiscovery()) {
+                        <span class="wave-discovery-badge font-mono">
+                          <svg class="spin-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                          ПОДБОР НОВИНОК...
+                        </span>
+                      }
+                    </div>
+                    <h2 class="wave-title">Моя Волна</h2>
+                    <p class="wave-desc">
+                      @if (recService.isMixActive()) {
+                        Бесконечный микс под ваш вкус • 70% медиатека, 30% открытия
+                      } @else {
+                        Персональный бесконечный поток на основе ваших любимых песен и вкусов
+                      }
+                    </p>
+                  </div>
+                </div>
+
+                <div class="wave-right-col">
+                  <!-- Mood Filter Chips (Clean SVGs, NO EMOJIS) -->
+                  <div class="wave-mood-chips">
+                    <button 
+                      class="mood-chip" 
+                      [class.active]="recService.currentMood() === 'all'" 
+                      (click)="toggleSmartMix('all')"
+                      title="Все стили"
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 12c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4Zm0 0c2 2.67 4 4 6 4a4 4 0 1 0 0-8c-2 0-4 1.33-6 4Z"/>
+                      </svg>
+                      <span>Все</span>
+                    </button>
+
+                    <button 
+                      class="mood-chip" 
+                      [class.active]="recService.currentMood() === 'energetic'" 
+                      (click)="toggleSmartMix('energetic')"
+                      title="Бодрый темп и драйв"
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                      </svg>
+                      <span>Бодрое</span>
+                    </button>
+
+                    <button 
+                      class="mood-chip" 
+                      [class.active]="recService.currentMood() === 'chill'" 
+                      (click)="toggleSmartMix('chill')"
+                      title="Спокойный чилл и релакс"
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M18 8h1a4 4 0 0 1 0 8h-1"/>
+                        <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/>
+                        <line x1="6" y1="1" x2="6" y2="4"/>
+                        <line x1="10" y1="1" x2="10" y2="4"/>
+                      </svg>
+                      <span>Спокойное</span>
+                    </button>
+
+                    <button 
+                      class="mood-chip" 
+                      [class.active]="recService.currentMood() === 'favorites'" 
+                      (click)="toggleSmartMix('favorites')"
+                      title="Только избранные треки"
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
+                      </svg>
+                      <span>Любимое</span>
+                    </button>
+                  </div>
+
+                  <!-- Main Wave Trigger Button -->
+                  <button 
+                    class="btn-wave-play" 
+                    (click)="toggleSmartMix(recService.currentMood())"
+                    [title]="recService.isMixActive() && audioService.isPlaying() ? 'Приостановить волну' : 'Включить Мою Волну'"
+                  >
+                    @if (recService.isMixActive() && audioService.isPlaying()) {
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <rect width="4" height="16" x="6" y="4" rx="1"/>
+                        <rect width="4" height="16" x="14" y="4" rx="1"/>
+                      </svg>
+                      <span>Пауза</span>
+                    } @else {
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                        <polygon points="6 3 20 12 6 21 6 3"/>
+                      </svg>
+                      <span>Слушать</span>
+                    }
+                  </button>
+                </div>
+              </div>
             </div>
           }
         </div>
@@ -521,16 +640,29 @@
   <app-player-bar
     (toggleQueueDrawer)="isQueueDrawerOpen.update(v => !v)"
     (expandMobilePlayer)="isMobilePlayerExpanded.set(true)"
+    (openAddToPlaylist)="openAddToPlaylistModal($event)"
   ></app-player-bar>
 
   
   <nav class="mobile-bottom-nav mobile-only">
-    <button class="m-nav-item" [class.active]="activeTab() === 'all'" (click)="setView('all')">
+    <button class="m-nav-item" [class.active]="activeTab() === 'all' && !recService.isMixActive()" (click)="setView('all')">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/>
         <rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>
       </svg>
       <span>Треки</span>
+    </button>
+
+    <button class="m-nav-item m-nav-wave" [class.active]="recService.isMixActive()" (click)="toggleSmartMix()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M2 10v4"/>
+        <path d="M6 7v10"/>
+        <path d="M10 4v16"/>
+        <path d="M14 8v8"/>
+        <path d="M18 5v14"/>
+        <path d="M22 10v4"/>
+      </svg>
+      <span>Волна</span>
     </button>
 
     <button class="m-nav-item" [class.active]="activeTab() === 'offline'" (click)="setView('offline')">
@@ -608,10 +740,33 @@
         <button 
           class="sheet-fav-btn" 
           [class.favorited]="cur.isFavorite"
-          (click)="libraryService.toggleFavorite(cur.id)"
+          (click)="toggleFavorite(cur)"
+          title="В избранное"
         >
           <svg width="24" height="24" viewBox="0 0 24 24" [attr.fill]="cur.isFavorite ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
             <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
+          </svg>
+        </button>
+
+        <button 
+          class="sheet-fav-btn" 
+          (click)="openAddToPlaylistModal(cur)"
+          title="Добавить в плейлист"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+            <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+          </svg>
+        </button>
+
+        <button 
+          class="sheet-fav-btn sheet-dislike-btn" 
+          (click)="dislikeCurrentTrack()"
+          title="Не моё (пропустить)"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
           </svg>
         </button>
 
@@ -951,7 +1106,11 @@
                 <div class="extracted-result-box">
                   @if (res.isRadioMix) {
                     <div class="radio-mix-notice">
-                      <span class="notice-icon">⚡</span>
+                      <span class="notice-icon">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                        </svg>
+                      </span>
                       <div class="notice-text">
                         <strong>YouTube Radio Mix:</strong> YouTube прикрепил авто-микс рекомендаций. Вы можете сохранить видео как цельный трек/микс или перенести треки в отдельный плейлист.
                       </div>
@@ -966,7 +1125,10 @@
                         [class.active]="extractMode() === 'single'"
                         (click)="extractMode.set('single')"
                       >
-                        💽 Цельный микс / трек ({{ formatTime(res.mainVideo.duration) }})
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/>
+                        </svg>
+                        <span>Цельный микс / трек ({{ formatTime(res.mainVideo.duration) }})</span>
                       </button>
                       <button 
                         type="button"
@@ -974,7 +1136,10 @@
                         [class.active]="extractMode() === 'playlist'"
                         (click)="extractMode.set('playlist')"
                       >
-                        📑 Плейлист ({{ res.tracks.length }} треков)
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                          <path d="M4 6h16M4 12h16M4 18h7"/>
+                        </svg>
+                        <span>Плейлист ({{ res.tracks.length }} треков)</span>
                       </button>
                     </div>
                   }
@@ -1989,6 +2154,155 @@
         <div class="modal-footer">
           <button class="btn-cancel" style="width: 100%; text-align: center;" (click)="isHistoryModalOpen.set(false)">
             Закрыть
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- Quick-Start Smart Mix Modal (Cold Start) -->
+  @if (isQuickStartMixModalOpen()) {
+    <div class="modal-overlay" (click)="isQuickStartMixModalOpen.set(false)">
+      <div class="modal-card quick-start-modal" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <div class="modal-title-wrap">
+            <span class="modal-tag font-mono">РЕКОМЕНДАТЕЛЬНЫЙ ДВИЖОК</span>
+            <h3 class="modal-title">Настройка Моей Волны</h3>
+          </div>
+          <button class="btn-modal-close" (click)="isQuickStartMixModalOpen.set(false)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="modal-body quick-start-body">
+          <p class="quick-start-desc">
+            В вашей медиатеке пока нет треков. Выберите, с чего начать персональный поток, или укажите ваш любимый стиль:
+          </p>
+
+          <!-- 3 Primary Action Tiles -->
+          <div class="quick-start-actions-grid">
+            <button class="qs-action-card" (click)="isQuickStartMixModalOpen.set(false); addModalTab.set('file'); isAddModalOpen.set(true)">
+              <div class="qs-card-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/>
+                  <path d="M12 12v9"/>
+                  <path d="m16 16-4-4-4 4"/>
+                </svg>
+              </div>
+              <div class="qs-card-info">
+                <span class="qs-card-title">Загрузить треки</span>
+                <span class="qs-card-sub">MP3, FLAC, WAV с устройства</span>
+              </div>
+            </button>
+
+            <button class="qs-action-card" (click)="isQuickStartMixModalOpen.set(false); addModalTab.set('youtube'); isAddModalOpen.set(true)">
+              <div class="qs-card-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                </svg>
+              </div>
+              <div class="qs-card-info">
+                <span class="qs-card-title">Импорт плейлиста</span>
+                <span class="qs-card-sub">YouTube или SoundCloud</span>
+              </div>
+            </button>
+
+            <button class="qs-action-card" (click)="isQuickStartMixModalOpen.set(false); addModalTab.set('search'); isAddModalOpen.set(true)">
+              <div class="qs-card-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <circle cx="11" cy="11" r="8"/>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+              </div>
+              <div class="qs-card-info">
+                <span class="qs-card-title">Поиск исполнителя</span>
+                <span class="qs-card-sub">Найти любимую песню</span>
+              </div>
+            </button>
+          </div>
+
+          <div class="qs-divider">
+            <span class="qs-divider-label font-mono">ИЛИ ВЫБЕРИТЕ СТАРТОВЫЙ ВАЙБ</span>
+          </div>
+
+          <!-- Genre Vibe Tiles (Clean SVG Icons, Strictly NO EMOJIS) -->
+          <div class="qs-vibes-grid">
+            <button class="qs-vibe-btn" (click)="selectQuickStartVibe('phonk')">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+              </svg>
+              <div class="qs-vibe-meta">
+                <span class="qs-vibe-name">Фонк &amp; Bass</span>
+                <span class="qs-vibe-desc">Дрифт, бас, тяжелый бит</span>
+              </div>
+            </button>
+
+            <button class="qs-vibe-btn" (click)="selectQuickStartVibe('hiphop')">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                <line x1="12" y1="19" x2="12" y2="23"/>
+                <line x1="8" y1="23" x2="16" y2="23"/>
+              </svg>
+              <div class="qs-vibe-meta">
+                <span class="qs-vibe-name">Хип-хоп &amp; Рэп</span>
+                <span class="qs-vibe-desc">Качевый флоу и биты</span>
+              </div>
+            </button>
+
+            <button class="qs-vibe-btn" (click)="selectQuickStartVibe('rock')">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="m18 2-7 7-3-3L1 13l7 7 7-7-3-3 7-7Z"/>
+              </svg>
+              <div class="qs-vibe-meta">
+                <span class="qs-vibe-name">Рок &amp; Драйв</span>
+                <span class="qs-vibe-desc">Гитары, энергия, альтернатива</span>
+              </div>
+            </button>
+
+            <button class="qs-vibe-btn" (click)="selectQuickStartVibe('lofi')">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 8h1a4 4 0 0 1 0 8h-1"/>
+                <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/>
+                <line x1="6" y1="1" x2="6" y2="4"/>
+                <line x1="10" y1="1" x2="10" y2="4"/>
+              </svg>
+              <div class="qs-vibe-meta">
+                <span class="qs-vibe-name">Lo-Fi &amp; Чилл</span>
+                <span class="qs-vibe-desc">Мягкие синты, кофе, релакс</span>
+              </div>
+            </button>
+
+            <button class="qs-vibe-btn" (click)="selectQuickStartVibe('pop')">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <polygon points="10 8 16 12 10 16 10 8"/>
+              </svg>
+              <div class="qs-vibe-meta">
+                <span class="qs-vibe-name">Поп &amp; Танцы</span>
+                <span class="qs-vibe-desc">Мировые хиты и ритм</span>
+              </div>
+            </button>
+
+            <button class="qs-vibe-btn" (click)="selectQuickStartVibe('indie')">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="4"/>
+                <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+              </svg>
+              <div class="qs-vibe-meta">
+                <span class="qs-vibe-name">Инди &amp; Вайб</span>
+                <span class="qs-vibe-desc">Атмосферное звучание</span>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn-cancel" style="width: 100%; text-align: center;" (click)="isQuickStartMixModalOpen.set(false)">
+            Отмена
           </button>
         </div>
       </div>

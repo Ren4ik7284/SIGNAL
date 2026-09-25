@@ -14,13 +14,11 @@ pub async fn init_db() -> Result<DbPool, sqlx::Error> {
         "sqlite://signal.db?mode=rwc".to_string()
     };
 
-    println!("[SIGNAL DB] Использование базы данных: {}", db_url);
+    println!("Database URL: {}", db_url);
 
     let connection_options = SqliteConnectOptions::from_str(&db_url)?
         .create_if_missing(true)
-        // WAL mode: параллельные читатели не блокируют писателя
         .journal_mode(SqliteJournalMode::Wal)
-        // Ожидаем 5 сек вместо немедленного SQLITE_BUSY
         .pragma("busy_timeout", "5000")
         .pragma("synchronous", "NORMAL")
         .pragma("foreign_keys", "ON");
@@ -46,7 +44,6 @@ pub async fn init_db() -> Result<DbPool, sqlx::Error> {
     .execute(&pool)
     .await?;
 
-    // Автоматическая миграция для существующих баз данных
     let _ = sqlx::query("ALTER TABLE users ADD COLUMN google_id TEXT").execute(&pool).await;
     let _ = sqlx::query("ALTER TABLE users ADD COLUMN email TEXT").execute(&pool).await;
     let _ = sqlx::query("ALTER TABLE users ADD COLUMN avatar_url TEXT").execute(&pool).await;
@@ -71,6 +68,7 @@ pub async fn init_db() -> Result<DbPool, sqlx::Error> {
             is_favorite INTEGER DEFAULT 0,
             is_live_stream INTEGER DEFAULT 0,
             is_local_upload INTEGER DEFAULT 0,
+            is_offline INTEGER DEFAULT 0,
             playlist_only INTEGER DEFAULT 0,
             added_at TEXT,
             PRIMARY KEY (user_id, id)
@@ -79,6 +77,8 @@ pub async fn init_db() -> Result<DbPool, sqlx::Error> {
     )
     .execute(&pool)
     .await?;
+
+    let _ = sqlx::query("ALTER TABLE tracks ADD COLUMN is_offline INTEGER DEFAULT 0").execute(&pool).await;
 
     sqlx::query(
         r#"
@@ -145,7 +145,6 @@ pub async fn init_db() -> Result<DbPool, sqlx::Error> {
     .execute(&pool)
     .await?;
 
-    // Индексы для ускорения запросов истории и wrapped-stats
     let _ = sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_history_user_played ON listening_history(user_id, played_at DESC)"
     ).execute(&pool).await;

@@ -94,6 +94,7 @@
 
       &:hover { color: var(--text-primary); }
       &.favorited { color: var(--accent-white); }
+      &.player-dislike-btn:hover { color: #ef4444; }
     }
   }
 

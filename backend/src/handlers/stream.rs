@@ -1,9 +1,10 @@
 use axum::{
     body::Body,
-    extract::Query,
+    extract::{ConnectInfo, Query, State},
     http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
+use std::net::SocketAddr;
 use std::process::Stdio;
 use std::time::Duration;
 use tokio::process::Command;
@@ -11,10 +12,11 @@ use tokio_util::io::ReaderStream;
 
 use crate::config::{apply_yt_dlp_common_args, apply_yt_dlp_common_args_no_cookies, get_yt_dlp_cmd, is_cloud_env, CLOUD_FALLBACK_URL};
 use crate::models::StreamParams;
+use crate::security::{check_rate_limit, check_url_ssrf, get_client_ip};
+use crate::AppState;
 
 fn extract_stream_url_from_output(out: &std::process::Output) -> Option<String> {
     let stdout = String::from_utf8_lossy(&out.stdout);
-    // Prefer typical streaming domain URLs
     for line in stdout.lines() {
         let trimmed = line.trim();
         if (trimmed.starts_with("http://") || trimmed.starts_with("https://"))
@@ -28,7 +30,6 @@ fn extract_stream_url_from_output(out: &std::process::Output) -> Option<String> 
             return Some(trimmed.to_string());
         }
     }
-    // Any valid http/https url
     for line in stdout.lines() {
         let trimmed = line.trim();
         if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
@@ -40,7 +41,6 @@ fn extract_stream_url_from_output(out: &std::process::Output) -> Option<String> 
 
 fn clean_music_title(title: &str) -> String {
     let mut s = title.to_string();
-    // Remove brackets like [...]
     while let Some(open) = s.find('[') {
         if let Some(close) = s[open..].find(']') {
             s.replace_range(open..=open + close, " ");
@@ -48,7 +48,6 @@ fn clean_music_title(title: &str) -> String {
             break;
         }
     }
-    // Remove common parenthetical noise like (Official Video), (Lyrics), (Audio), etc.
     let noise_patterns = [
         "official music video",
         "official video",
@@ -78,7 +77,6 @@ fn clean_music_title(title: &str) -> String {
             }
         }
     }
-    // Remove trailing pipes like "| ..."
     if let Some(pipe) = s.find('|') {
         s.truncate(pipe);
     }
@@ -87,9 +85,29 @@ fn clean_music_title(title: &str) -> String {
 }
 
 pub async fn stream_audio(
+    State(state): State<AppState>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     Query(params): Query<StreamParams>,
-    _client_headers: HeaderMap,
 ) -> Result<Response, StatusCode> {
+    let client_ip = get_client_ip(&headers, Some(addr));
+    check_rate_limit(
+        &state.endpoint_rate_limits,
+        &format!("stream:{}", client_ip),
+        40,
+        60,
+    )?;
+
+    let _permit = match tokio::time::timeout(
+        Duration::from_millis(2000),
+        state.heavy_process_semaphore.acquire(),
+    )
+    .await
+    {
+        Ok(Ok(permit)) => permit,
+        _ => return Err(StatusCode::TOO_MANY_REQUESTS),
+    };
+
     let mut target = String::new();
 
     if let Some(u) = params.url.clone() {
@@ -109,7 +127,6 @@ pub async fn stream_audio(
         }
     }
 
-    // Support streaming by title and artist directly
     if target.is_empty() {
         if let Some(title) = params.title.as_deref() {
             let t = title.trim();
@@ -129,6 +146,16 @@ pub async fn stream_audio(
         return Err(StatusCode::BAD_REQUEST);
     }
 
+    if target.starts_with("http://") || target.starts_with("https://") {
+        let is_trusted_music_domain = target.contains("youtube.com")
+            || target.contains("youtu.be")
+            || target.contains("soundcloud.com")
+            || target.contains("sndcdn.com");
+        if !is_trusted_music_domain {
+            check_url_ssrf(&target).await?;
+        }
+    }
+
     let yt_cmd = get_yt_dlp_cmd();
     let mut direct_url = String::new();
 
@@ -141,24 +168,9 @@ pub async fn stream_audio(
             || target.contains("/stream/")
             || target.contains(":80"))
     {
-        if let Ok(parsed) = reqwest::Url::parse(&target) {
-            if let Some(host) = parsed.host_str() {
-                let lower_host = host.to_lowercase();
-                if lower_host == "localhost"
-                    || lower_host.ends_with(".local")
-                    || lower_host.ends_with(".internal")
-                    || lower_host == "127.0.0.1"
-                    || lower_host == "::1"
-                {
-                    return Err(StatusCode::FORBIDDEN);
-                }
-            }
-        }
+        check_url_ssrf(&target).await?;
         direct_url = target.clone();
     } else if target.contains("soundcloud.com") || target.starts_with("scsearch") {
-        println!("[stream] Resolving SoundCloud stream for: {}", target);
-
-        // Attempt 1: without cookies (SoundCloud works reliably without cookies)
         let mut sc_cmd = Command::new(&yt_cmd);
         apply_yt_dlp_common_args_no_cookies(&mut sc_cmd);
         sc_cmd.args(["--no-playlist", "-g", "-f", "bestaudio/b", "--", &target]);
@@ -168,9 +180,7 @@ pub async fn stream_audio(
             }
         }
 
-        // Attempt 2: with cookies
         if direct_url.is_empty() {
-            println!("[stream] SoundCloud direct failed, trying with cookies...");
             let mut sc_cmd2 = Command::new(&yt_cmd);
             apply_yt_dlp_common_args(&mut sc_cmd2);
             sc_cmd2.args(["--no-playlist", "-g", "-f", "bestaudio/b", "--", &target]);
@@ -181,7 +191,6 @@ pub async fn stream_audio(
             }
         }
 
-        // Attempt 3: if direct soundcloud URL failed, search alternative using title/artist
         if direct_url.is_empty() {
             let title = params.title.as_deref().unwrap_or("").trim();
             let artist = params.artist.as_deref().unwrap_or("").trim();
@@ -192,7 +201,6 @@ pub async fn stream_audio(
                 } else {
                     format!("scsearch2:{}", clean)
                 };
-                println!("[stream] SoundCloud direct URL failed, searching alternative: {}", query);
                 let mut alt_cmd = Command::new(&yt_cmd);
                 apply_yt_dlp_common_args_no_cookies(&mut alt_cmd);
                 alt_cmd.args(["--no-playlist", "-g", "-f", "bestaudio/b", "--", &query]);
@@ -204,9 +212,6 @@ pub async fn stream_audio(
             }
         }
     } else {
-        println!("[stream] Resolving audio stream for: {}", target);
-
-        // 1. Fast direct YouTube attempt (timeout 3.5s - don't hang if blocked!)
         let mut cmd_fast = Command::new(&yt_cmd);
         apply_yt_dlp_common_args(&mut cmd_fast);
         cmd_fast.args([
@@ -222,7 +227,6 @@ pub async fn stream_audio(
             }
         }
 
-        // 2. If direct YouTube failed, check if title/artist is available
         let mut resolved_title = params.title.as_deref().unwrap_or("").trim().to_string();
         let mut resolved_uploader = params.artist.as_deref().unwrap_or("").trim().to_string();
 
@@ -249,7 +253,6 @@ pub async fn stream_audio(
             }
         }
 
-        // 3. FAST SoundCloud fallback when YouTube is blocked (works in 3-4s!)
         if direct_url.is_empty() && !resolved_title.is_empty() {
             let clean_title = clean_music_title(&resolved_title);
             let clean_uploader = resolved_uploader.replace(" - Topic", "").trim().to_string();
@@ -259,7 +262,6 @@ pub async fn stream_audio(
                 format!("scsearch2:{}", clean_title)
             };
 
-            println!("[stream] YouTube blocked or timed out, trying fast SoundCloud fallback: {}", sc_query);
             let mut sc_fallback = Command::new(&yt_cmd);
             apply_yt_dlp_common_args_no_cookies(&mut sc_fallback);
             sc_fallback.args(["--no-playlist", "-g", "-f", "bestaudio/b", "--", &sc_query]);
@@ -270,10 +272,8 @@ pub async fn stream_audio(
                 }
             }
 
-            // If combined title+artist didn't match, try title only on SoundCloud
             if direct_url.is_empty() && !clean_uploader.is_empty() {
                 let sc_title_query = format!("scsearch2:{}", clean_title);
-                println!("[stream] Trying SoundCloud title-only fallback: {}", sc_title_query);
                 let mut sc_title_fb = Command::new(&yt_cmd);
                 apply_yt_dlp_common_args_no_cookies(&mut sc_title_fb);
                 sc_title_fb.args(["--no-playlist", "-g", "-f", "bestaudio/b", "--", &sc_title_query]);
@@ -286,9 +286,7 @@ pub async fn stream_audio(
             }
         }
 
-        // 4. Try android player client
         if direct_url.is_empty() {
-            println!("[stream] Trying YouTube player_client=android for: {}", target);
             let mut cmd_android = Command::new(&yt_cmd);
             apply_yt_dlp_common_args_no_cookies(&mut cmd_android);
             cmd_android.args([
@@ -306,7 +304,6 @@ pub async fn stream_audio(
             }
         }
 
-        // 5. Invidious instance fallback
         if direct_url.is_empty() {
             let vid = if let Some(idx) = target.find("v=") {
                 let rest = &target[idx + 2..];
@@ -355,9 +352,7 @@ pub async fn stream_audio(
             }
         }
 
-        // 6. Cloud proxy fallback if running locally
         if direct_url.is_empty() && !is_cloud_env() {
-            println!("[stream] Local extraction failed/blocked. Proxying stream from cloud backend...");
             let cloud_stream_url = format!(
                 "{}/api/stream?url={}{}{}{}",
                 CLOUD_FALLBACK_URL,
@@ -385,11 +380,9 @@ pub async fn stream_audio(
     }
 
     if direct_url.is_empty() {
-        eprintln!("[stream] Failed to resolve playable URL for: {}", target);
         return Err(StatusCode::NOT_FOUND);
     }
 
-    println!("[stream] Direct audio URL resolved successfully, starting ffmpeg transcode...");
     let referer = if direct_url.contains("soundcloud") || direct_url.contains("sndcdn") {
         "https://soundcloud.com/"
     } else {
@@ -446,10 +439,7 @@ pub async fn stream_audio(
         .spawn()
     {
         Ok(c) => c,
-        Err(e) => {
-            eprintln!("[stream] Failed to spawn ffmpeg: {}", e);
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
-        }
+        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
     };
 
     let stdout = match ffmpeg_child.stdout.take() {

@@ -300,7 +300,6 @@ export class AuthService {
           this.googleClientId.set(data.google_client_id);
           this.isGoogleAuthEnabled.set(true);
         } else {
-          // Проверяем сохраненный пользователем клиентский ID
           const localId = localStorage.getItem(this.GOOGLE_CLIENT_ID_STORAGE_KEY);
           if (localId) {
             this.googleClientId.set(localId);

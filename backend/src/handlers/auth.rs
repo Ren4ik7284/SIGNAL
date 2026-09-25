@@ -1,9 +1,10 @@
-use axum::extract::State;
+use axum::extract::{ConnectInfo, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::Json;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sqlx::Row;
+use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
@@ -12,31 +13,23 @@ use crate::auth::{
     validate_username, verify_password, AuthConfigResponse, AuthResponse, GoogleAuthRequest,
     LoginRequest, RegisterRequest, UserInfo,
 };
+use crate::security::get_client_ip;
 use crate::AppState;
 
 pub async fn register(
     State(state): State<AppState>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
     Json(payload): Json<RegisterRequest>,
 ) -> Result<Json<AuthResponse>, (StatusCode, Json<Value>)> {
-    let ip = headers
-        .get("x-forwarded-for")
-        .or_else(|| headers.get("x-real-ip"))
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("unknown")
-        .split(',')
-        .next()
-        .unwrap_or("unknown")
-        .trim()
-        .to_string();
+    let ip = get_client_ip(&headers, Some(addr));
 
-    // Защита от спам-регистраций и Bcrypt DoS: не более 5 регистраций за 10 минут с одного IP
     {
         let mut attempts = state.login_attempts.lock().unwrap_or_else(|e| e.into_inner());
         let now = Instant::now();
-        let window = Duration::from_secs(600); // 10 минут
+        let window = Duration::from_secs(600);
 
-        if attempts.len() > 1000 {
+        if attempts.len() > 2000 {
             attempts.retain(|_, (_, start)| now.duration_since(*start) <= window);
         }
 
@@ -101,7 +94,7 @@ pub async fn register(
     .execute(&state.pool)
     .await
     .map_err(|err| {
-        eprintln!("[SIGNAL AUTH] Ошибка регистрации пользователя: {}", err);
+        eprintln!("Registration DB error: {}", err);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "error": "Не удалось зарегистрировать пользователя" })),
@@ -128,49 +121,40 @@ pub async fn register(
 
 pub async fn login(
     State(state): State<AppState>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
     Json(payload): Json<LoginRequest>,
 ) -> Result<Json<AuthResponse>, (StatusCode, Json<Value>)> {
     let clean_login = payload.login.trim().to_lowercase();
-    let ip = headers
-        .get("x-forwarded-for")
-        .or_else(|| headers.get("x-real-ip"))
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("unknown")
-        .split(',')
-        .next()
-        .unwrap_or("unknown")
-        .trim()
-        .to_string();
+    let ip = get_client_ip(&headers, Some(addr));
+    let acct_ip_key = format!("acct_ip:{}:{}", clean_login, ip);
+    let ip_key = format!("ip:{}", ip);
 
-    // Проверка лимитов попыток входа
     {
         let mut attempts = state.login_attempts.lock().unwrap_or_else(|e| e.into_inner());
         let now = Instant::now();
-        let window = Duration::from_secs(300); // 5 минут
+        let window = Duration::from_secs(300);
 
-        if attempts.len() > 1000 {
+        if attempts.len() > 2000 {
             attempts.retain(|_, (_, start)| now.duration_since(*start) <= window);
         }
 
-        // Не более 5 попыток на один логин
         if !clean_login.is_empty() {
-            if let Some(acct_entry) = attempts.get(&format!("acct:{}", clean_login)) {
+            if let Some(acct_entry) = attempts.get(&acct_ip_key) {
                 if now.duration_since(acct_entry.1) <= window && acct_entry.0 >= 5 {
                     return Err((
                         StatusCode::TOO_MANY_REQUESTS,
-                        Json(json!({ "error": "Слишком много неудачных попыток входа для этого логина. Подождите 5 минут." })),
+                        Json(json!({ "error": "Слишком много неудачных попыток входа для этой связки логина и IP. Подождите 5 минут." })),
                     ));
                 }
             }
         }
 
-        // Не более 20 попыток с одного IP
-        if let Some(ip_entry) = attempts.get(&format!("ip:{}", ip)) {
+        if let Some(ip_entry) = attempts.get(&ip_key) {
             if now.duration_since(ip_entry.1) <= window && ip_entry.0 >= 20 {
                 return Err((
                     StatusCode::TOO_MANY_REQUESTS,
-                    Json(json!({ "error": "Слишком много запросов с вашего IP. Подождите 5 минут." })),
+                    Json(json!({ "error": "Слишком много неудачных запросов с вашего IP. Подождите 5 минут." })),
                 ));
             }
         }
@@ -210,7 +194,7 @@ pub async fn login(
         let window = Duration::from_secs(300);
 
         if !clean_login.is_empty() {
-            let entry = attempts.entry(format!("acct:{}", clean_login)).or_insert((0, now));
+            let entry = attempts.entry(acct_ip_key.clone()).or_insert((0, now));
             if now.duration_since(entry.1) > window {
                 *entry = (1, now);
             } else {
@@ -218,7 +202,7 @@ pub async fn login(
             }
         }
 
-        let ip_entry = attempts.entry(format!("ip:{}", ip)).or_insert((0, now));
+        let ip_entry = attempts.entry(ip_key.clone()).or_insert((0, now));
         if now.duration_since(ip_entry.1) > window {
             *ip_entry = (1, now);
         } else {
@@ -230,7 +214,7 @@ pub async fn login(
         Some(r) => r,
         None => {
             record_attempt();
-            tokio::time::sleep(Duration::from_millis(150)).await;
+            tokio::time::sleep(Duration::from_millis(250)).await;
             return Err((
                 StatusCode::UNAUTHORIZED,
                 Json(json!({ "error": "Неверное имя пользователя или пароль" })),
@@ -244,17 +228,16 @@ pub async fn login(
 
     if !verify_password(password, &password_hash) {
         record_attempt();
-        tokio::time::sleep(Duration::from_millis(150)).await;
+        tokio::time::sleep(Duration::from_millis(250)).await;
         return Err((
             StatusCode::UNAUTHORIZED,
             Json(json!({ "error": "Неверное имя пользователя или пароль" })),
         ));
     }
 
-    // Успешный вход — сбрасываем счётчик неудачных попыток для данного аккаунта
     {
         let mut attempts = state.login_attempts.lock().unwrap_or_else(|e| e.into_inner());
-        attempts.remove(&format!("acct:{}", clean_login));
+        attempts.remove(&acct_ip_key);
     }
 
     let token = create_jwt(&user_id, &db_username).map_err(|_| {
@@ -339,27 +322,18 @@ struct GoogleTokenInfo {
 
 pub async fn google_login(
     State(state): State<AppState>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
     Json(payload): Json<GoogleAuthRequest>,
 ) -> Result<Json<AuthResponse>, (StatusCode, Json<Value>)> {
-    let ip = headers
-        .get("x-forwarded-for")
-        .or_else(|| headers.get("x-real-ip"))
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("unknown")
-        .split(',')
-        .next()
-        .unwrap_or("unknown")
-        .trim()
-        .to_string();
+    let ip = get_client_ip(&headers, Some(addr));
 
-    // Защита от спама запросов к Google
     {
         let mut attempts = state.login_attempts.lock().unwrap_or_else(|e| e.into_inner());
         let now = Instant::now();
         let window = Duration::from_secs(300);
 
-        if attempts.len() > 1000 {
+        if attempts.len() > 2000 {
             attempts.retain(|_, (_, start)| now.duration_since(*start) <= window);
         }
 
@@ -376,6 +350,16 @@ pub async fn google_login(
             }
         }
     }
+
+    let expected_client_id = match std::env::var("GOOGLE_CLIENT_ID") {
+        Ok(val) if !val.trim().is_empty() => val.trim().to_string(),
+        _ => {
+            return Err((
+                StatusCode::FORBIDDEN,
+                Json(json!({ "error": "Google авторизация отключена или не настроена на сервере" })),
+            ));
+        }
+    };
 
     let cred = payload.credential.trim();
     if cred.is_empty() {
@@ -401,7 +385,7 @@ pub async fn google_login(
         .send()
         .await
         .map_err(|e| {
-            eprintln!("[SIGNAL GOOGLE AUTH] Ошибка сети при обращении к Google: {}", e);
+            eprintln!("Google auth network error: {}", e);
             (
                 StatusCode::BAD_GATEWAY,
                 Json(json!({ "error": "Не удалось связаться с серверами Google для проверки подлинности" })),
@@ -409,22 +393,19 @@ pub async fn google_login(
         })?;
 
     if !resp.status().is_success() {
-        eprintln!("[SIGNAL GOOGLE AUTH] Токен не прошел проверку Google: статус {}", resp.status());
         return Err((
             StatusCode::UNAUTHORIZED,
             Json(json!({ "error": "Недействительный или просроченный токен Google" })),
         ));
     }
 
-    let info: GoogleTokenInfo = resp.json().await.map_err(|e| {
-        eprintln!("[SIGNAL GOOGLE AUTH] Ошибка десериализации ответа Google: {}", e);
+    let info: GoogleTokenInfo = resp.json().await.map_err(|_| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "error": "Ошибка обработки ответа Google" })),
         )
     })?;
 
-    // Проверка издателя (issuer)
     if info.iss != "https://accounts.google.com" && info.iss != "accounts.google.com" {
         return Err((
             StatusCode::UNAUTHORIZED,
@@ -432,19 +413,13 @@ pub async fn google_login(
         ));
     }
 
-    // Проверка Client ID (если настроен в ENV)
-    if let Ok(expected_client_id) = std::env::var("GOOGLE_CLIENT_ID") {
-        let expected = expected_client_id.trim();
-        if !expected.is_empty() && info.aud != expected {
-            eprintln!("[SIGNAL GOOGLE AUTH] Aud mismatch: expected '{}', got '{}'", expected, info.aud);
-            return Err((
-                StatusCode::UNAUTHORIZED,
-                Json(json!({ "error": "Токен выдан для другого Client ID" })),
-            ));
-        }
+    if info.aud != expected_client_id {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            Json(json!({ "error": "Токен выдан для другого Client ID" })),
+        ));
     }
 
-    // Проверка срока действия
     let exp_timestamp = match &info.exp {
         Some(Value::Number(n)) => n.as_i64(),
         Some(Value::String(s)) => s.parse::<i64>().ok(),
@@ -459,7 +434,6 @@ pub async fn google_login(
         }
     }
 
-    // Проверка подтверждения почты
     let email_verified = match &info.email_verified {
         Some(Value::Bool(b)) => *b,
         Some(Value::String(s)) => s.eq_ignore_ascii_case("true"),
@@ -476,13 +450,11 @@ pub async fn google_login(
     let email_opt = info.email.as_ref().map(|e| e.trim().to_lowercase()).filter(|e| !e.is_empty());
     let avatar_opt = info.picture.as_ref().map(|p| p.trim().to_string()).filter(|p| !p.is_empty());
 
-    // 1. Поиск по google_id
     let user_by_google = sqlx::query("SELECT id, username, email, avatar_url FROM users WHERE google_id = ?")
         .bind(&google_id)
         .fetch_optional(&state.pool)
         .await
-        .map_err(|e| {
-            eprintln!("[SIGNAL GOOGLE AUTH] DB error: {}", e);
+        .map_err(|_| {
             (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Ошибка базы данных" })))
         })?;
 
@@ -492,7 +464,6 @@ pub async fn google_login(
         let current_email: Option<String> = row.get("email");
         let current_avatar: Option<String> = row.get("avatar_url");
 
-        // Обновим аватар/email при необходимости
         if (avatar_opt.is_some() && current_avatar != avatar_opt) || (email_opt.is_some() && current_email != email_opt) {
             let _ = sqlx::query("UPDATE users SET avatar_url = COALESCE(?, avatar_url), email = COALESCE(?, email) WHERE id = ?")
                 .bind(&avatar_opt)
@@ -517,14 +488,12 @@ pub async fn google_login(
         }));
     }
 
-    // 2. Если по google_id не найден, но есть подтверждённый email — проверяем привязку
     if let Some(ref email) = email_opt {
         let user_by_email = sqlx::query("SELECT id, username, email, avatar_url, google_id FROM users WHERE LOWER(email) = LOWER(?)")
             .bind(email)
             .fetch_optional(&state.pool)
             .await
-            .map_err(|e| {
-                eprintln!("[SIGNAL GOOGLE AUTH] DB error: {}", e);
+            .map_err(|_| {
                 (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Ошибка базы данных" })))
             })?;
 
@@ -566,7 +535,6 @@ pub async fn google_login(
         }
     }
 
-    // 3. Пользователь новый — генерируем красивое и уникальное имя пользователя
     let base_name = if let Some(ref name) = info.name {
         let cleaned: String = name
             .chars()
@@ -602,7 +570,6 @@ pub async fn google_login(
         base_name
     };
 
-    // Подбираем свободное имя пользователя
     let mut chosen_username = base_name.clone();
     let mut counter = 1;
     loop {
@@ -624,7 +591,6 @@ pub async fn google_login(
         }
     }
 
-    // Создаём надёжный случайный пароль для SQLite NOT NULL
     let random_pass = format!("goog_{}_{}", Uuid::new_v4(), fastrand::u64(..));
     let password_hash = hash_password(&random_pass).map_err(|_| {
         (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Не удалось сгенерировать хэш" })))
@@ -646,7 +612,7 @@ pub async fn google_login(
     .execute(&state.pool)
     .await
     .map_err(|e| {
-        eprintln!("[SIGNAL GOOGLE AUTH] Insert error: {}", e);
+        eprintln!("Google auth user creation error: {}", e);
         (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": "Не удалось создать аккаунт Google" })))
     })?;
 

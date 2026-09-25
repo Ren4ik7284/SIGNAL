@@ -2,6 +2,7 @@ import { Component, EventEmitter, Input, Output, inject, ViewEncapsulation } fro
 import { CommonModule } from '@angular/common';
 import { LibraryService } from '../../services/library.service';
 import { AuthService } from '../../services/auth.service';
+import { AudioService } from '../../services/audio.service';
 
 @Component({
   selector: 'app-sidebar',
@@ -14,12 +15,19 @@ import { AuthService } from '../../services/auth.service';
 export class SidebarComponent {
   readonly libraryService = inject(LibraryService);
   readonly authService = inject(AuthService);
+  readonly audioService = inject(AudioService);
 
   @Input() activeTab: 'all' | 'favorites' | 'uploads' | 'streams' | 'playlist' | 'offline' = 'all';
 
   @Output() viewChange = new EventEmitter<{ view: string; playlistId?: string }>();
+  @Output() triggerSmartMix = new EventEmitter<void>();
   @Output() createPlaylist = new EventEmitter<void>();
   @Output() openWrapped = new EventEmitter<void>();
   @Output() openHistory = new EventEmitter<void>();
   @Output() openAuth = new EventEmitter<void>();
+
+  onMixClick() {
+    this.viewChange.emit({ view: 'all' });
+    this.triggerSmartMix.emit();
+  }
 }

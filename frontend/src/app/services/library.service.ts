@@ -475,7 +475,6 @@ export class LibraryService implements OnDestroy {
 
   async pushLibraryToBackend() {
     if (!this.isBackendOnline()) return;
-    // Синкаем только авторизованных — у каждого своя библиотека на сервере
     if (!this.authService.isAuthenticated()) return;
 
     try {
@@ -508,19 +507,8 @@ export class LibraryService implements OnDestroy {
     }
   }
 
-  /**
-   * Синхронизация с бэкендом.
-   * Умное слияние — НЕ стирает локальные треки, а ОБЪЕДИНЯЕТ.
-   *
-   * Логика:
-   * 1. Нет авторизации → не трогаем ничего (локальные данные гостя)
-   * 2. Только дефолтные треки → берём из облака полностью (первый вход)
-   * 3. Есть свои треки → объединяем (union по id и audioUrl), не заменяем
-   * 4. Локальное новее → пушим в облако
-   */
   async syncWithBackendOnStartup(forceCloud = false) {
     if (!this.isBackendOnline()) return;
-    // Без авторизации не синкаемся — у каждого своя история
     if (!this.authService.isAuthenticated()) return;
 
     try {
@@ -538,8 +526,7 @@ export class LibraryService implements OnDestroy {
         localTracks.length === 0 ||
         localTracks.every((t) => t.id.startsWith('default-track-'));
 
-      // Случай 1: forceCloud (вход в аккаунт, смена пользователя) или пустая локалка -> строго берем из облака
-      if (forceCloud || localTracks.length === 0) {
+      if (forceCloud || localTracks.length === 0 || cloudUpdatedAt > localUpdatedAt) {
         const rawTracks: Track[] = Array.isArray(data.tracks) ? data.tracks : [];
         const cloudTracks: Track[] = rawTracks.filter((t: Track) => !t.id.startsWith('default-track-'));
         const cloudPlaylists: Playlist[] = Array.isArray(data.playlists) ? data.playlists : [];
@@ -547,19 +534,35 @@ export class LibraryService implements OnDestroy {
           ? data.radio_stations
           : [...this.defaultRadioStations];
 
-        this.tracks.set(cloudTracks);
+        const localBlobTracks = localTracks.filter((t) => t.audioUrl && t.audioUrl.startsWith('blob:'));
+        const mergedTracks = [
+          ...cloudTracks,
+          ...localBlobTracks.filter((b) => !cloudTracks.some((c) => c.id === b.id)),
+        ];
+
+        this.tracks.set(mergedTracks);
         this.playlists.set(cloudPlaylists);
         this.radioStations.set(cloudStations);
         this.saveLocalWithoutCloudSync();
         try {
           localStorage.setItem(this.STORAGE_KEY_UPDATED_AT, (cloudUpdatedAt || Date.now()).toString());
         } catch {}
+
+        try {
+          const offlineSvc = this.offlineService;
+          for (const t of cloudTracks) {
+            if (t.isOffline && !offlineSvc.isTrackOffline(t.id) && !offlineSvc.isDownloading(t.id)) {
+              if (t.audioUrl && !t.audioUrl.startsWith('blob:')) {
+                offlineSvc.saveTrackOffline(t).catch(() => {});
+              }
+            }
+          }
+        } catch {}
+
         this.isCloudSynced.set(true);
         return;
       }
 
-      // Случай 2: умное двустороннее слияние
-      // Добавляем треки из облака которых нет локально (по id И по audioUrl)
       if (Array.isArray(data.tracks) && data.tracks.length > 0) {
         const currentTracks = this.tracks();
         const localIds = new Set(currentTracks.map((t) => t.id));
@@ -573,7 +576,6 @@ export class LibraryService implements OnDestroy {
         }
       }
 
-      // Добавляем плейлисты из облака которых нет локально
       if (Array.isArray(data.playlists) && data.playlists.length > 0) {
         const localPlIds = new Set(this.playlists().map((p) => p.id));
         const missingPls = (data.playlists as Playlist[]).filter((p) => !localPlIds.has(p.id));
@@ -582,7 +584,6 @@ export class LibraryService implements OnDestroy {
         }
       }
 
-      // Случай 3: локальное новее → пушим в облако
       if (localTracks.length > 0 && !isOnlyDefaultTracks && localUpdatedAt > cloudUpdatedAt) {
         await this.pushLibraryToBackend();
         return;
@@ -594,7 +595,30 @@ export class LibraryService implements OnDestroy {
     }
   }
 
-  toggleFavorite(trackId: string) {
+  updateTrackOfflineStatus(trackId: string, isOffline: boolean) {
+    this.tracks.update((current) =>
+      current.map((t) => (t.id === trackId ? { ...t, isOffline } : t))
+    );
+    this.persistTracks();
+    this.pushLibraryToBackend();
+  }
+
+  toggleFavorite(trackId: string, trackObj?: Track) {
+    const existing = this.tracks().find((t) => t.id === trackId);
+    if (!existing && trackObj) {
+      const newTrack: Track = { ...trackObj, isFavorite: true, playlistOnly: false };
+      this.tracks.update((cur) => [newTrack, ...cur]);
+      const favs = this.tracks()
+        .filter((t) => t.isFavorite)
+        .map((t) => t.id);
+      try {
+        localStorage.setItem(this.STORAGE_KEY_FAVORITES, JSON.stringify(favs));
+      } catch {}
+      this.persistTracks();
+      this.pushLibraryToBackend();
+      return;
+    }
+
     this.tracks.update((current) =>
       current.map((t) => {
         if (t.id === trackId) {
@@ -610,6 +634,7 @@ export class LibraryService implements OnDestroy {
       localStorage.setItem(this.STORAGE_KEY_FAVORITES, JSON.stringify(favs));
     } catch {}
     this.persistTracks();
+    this.pushLibraryToBackend();
   }
 
   addTrackToLibrary(track: Track) {
@@ -618,9 +643,9 @@ export class LibraryService implements OnDestroy {
       this.tracks.update((cur) => [{ ...track, playlistOnly: false }, ...cur]);
       this.persistTracks();
       this.pushLibraryToBackend();
-    } else if (existing.playlistOnly) {
+    } else if (existing.playlistOnly || (track.isOffline && !existing.isOffline)) {
       this.tracks.update((cur) =>
-        cur.map((t) => (t.id === existing.id ? { ...t, playlistOnly: false } : t))
+        cur.map((t) => (t.id === existing.id ? { ...t, playlistOnly: false, isOffline: track.isOffline || t.isOffline } : t))
       );
       this.persistTracks();
       this.pushLibraryToBackend();
@@ -853,7 +878,6 @@ export class LibraryService implements OnDestroy {
       isOffline: true,
     };
 
-    // Сохраняем аудиофайл в офлайн-кэш Cache API навсегда, чтобы он работал и после перезагрузки страницы
     await this.offlineService.saveBlobOffline(newTrack, file);
 
     this.tracks.update((current) => [newTrack, ...current]);
@@ -1088,26 +1112,14 @@ export class LibraryService implements OnDestroy {
     }
   }
 
-  /**
-   * Вызывается после успешного логина.
-   * Перезагружает библиотеку из namespace текущего пользователя,
-   * затем синкается с облаком.
-   */
   async onUserLoggedIn() {
-    // 1. Очищаем состояние в памяти от предыдущей сессии/гостя
     this.tracks.set([]);
     this.playlists.set([]);
     this.activePlaylistId.set(null);
     this.initLibrary();
-
-    // 2. Всегда загружаем библиотеку этого пользователя из облака
     await this.syncWithBackendOnStartup(true);
   }
 
-  /**
-   * Вызывается после выхода из аккаунта.
-   * Полностью очищает текущую медиатеку в памяти и гостевом хранилище.
-   */
   onUserLoggedOut() {
     this.tracks.set([]);
     this.playlists.set([]);

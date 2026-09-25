@@ -82,7 +82,7 @@
         </div>
 
         <!-- Fullscreen Button -->
-        <button class="vis-btn-icon" (click)="toggleFullscreen()" title="Полный экран (F)">
+        <button class="vis-btn-icon desktop-only" (click)="toggleFullscreen()" title="Полный экран (F)">
           @if (isFullscreen()) {
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>
@@ -110,14 +110,22 @@
 
       <!-- Center artwork pulse for circle mode -->
       @if (visualType() === 'circle') {
-        <div class="vis-circle-center-art">
+        <div 
+          class="vis-circle-center-art"
+          [style.width.px]="circleDiameter()"
+          [style.height.px]="circleDiameter()"
+          [style.transform]="'translate(-50%, -50%) scale(' + circleScale() + ')'"
+        >
           @if (audioService.currentTrack()?.coverUrl) {
             <img [src]="audioService.currentTrack()!.coverUrl" alt="" class="circle-cover-img" />
           } @else {
             <div class="circle-cover-placeholder font-mono">
-              Recro
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/>
+              </svg>
             </div>
           }
+          <div class="circle-cover-vignette"></div>
         </div>
       }
     </main>
