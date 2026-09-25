@@ -1619,7 +1619,7 @@
   background-color: rgba(0, 0, 0, 0.7);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  z-index: 100;
+  z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4735,88 +4735,196 @@
   100% { height: 12px; }
 }
 
-/* Mix Settings Modal Styles (Strict site palette) */
-.mix-settings-modal {
-  max-width: 580px;
-  width: 95%;
+/* Mix Settings Dialog Styles (Sleek Dark Monochrome) */
+.mix-settings-dialog {
+  max-width: 520px;
+  width: 100%;
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
+  border-radius: 14px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
+  overflow: hidden;
 
-  .mix-settings-body {
+  .modal-header {
+    padding: 18px 22px 14px;
+    border-bottom: 1px solid var(--border-subtle);
     display: flex;
-    flex-direction: column;
-    gap: 20px;
-    padding: 20px 24px;
-    max-height: 75vh;
-    overflow-y: auto;
+    justify-content: space-between;
+    align-items: flex-start;
 
-    .mix-settings-desc {
-      font-size: 13px;
-      color: var(--text-secondary);
-      line-height: 1.5;
-      margin: 0;
-    }
+    .modal-title-group {
+      min-width: 0;
 
-    .mix-settings-section {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-
-      .mix-section-title {
+      .mix-tag-row {
         display: flex;
         align-items: center;
         gap: 8px;
-        font-size: 13px;
-        font-weight: 600;
-        color: var(--text-primary);
+        margin-bottom: 6px;
+
+        .mix-tag-pill {
+          font-size: 10px;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--text-muted);
+          background: var(--bg-panel);
+          padding: 2px 7px;
+          border-radius: 4px;
+          border: 1px solid var(--border-subtle);
+        }
+
+        .mix-status-dot {
+          width: 4px;
+          height: 4px;
+          border-radius: 50%;
+          background: var(--border-muted);
+        }
+
+        .mix-tag-summary {
+          font-size: 11px;
+          color: var(--text-secondary);
+        }
       }
 
-      .mix-chips-grid {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 10px;
+      .modal-title {
+        font-size: 17px;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin: 0;
+        letter-spacing: -0.01em;
+      }
 
-        &.mix-chips-grid-3 {
+      .modal-subtitle {
+        font-size: 12px;
+        color: var(--text-secondary);
+        margin: 2px 0 0;
+      }
+    }
+
+    .btn-close-sm {
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px;
+      border-radius: 6px;
+      transition: all 0.15s ease;
+
+      &:hover {
+        background: var(--bg-panel);
+        color: var(--text-primary);
+      }
+    }
+  }
+
+  .mix-settings-body {
+    padding: 20px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    max-height: 70vh;
+    overflow-y: auto;
+
+    .mix-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+
+      .mix-group-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+
+        .mix-group-title {
+          font-size: 13px;
+          font-weight: 600;
+          color: var(--text-primary);
+        }
+
+        .mix-group-hint {
+          font-size: 11px;
+          color: var(--text-muted);
+        }
+      }
+
+      .mix-pill-grid {
+        display: grid;
+        gap: 8px;
+
+        &.mix-pill-grid-2 {
+          grid-template-columns: repeat(2, 1fr);
+        }
+
+        &.mix-pill-grid-3 {
           grid-template-columns: repeat(3, 1fr);
         }
 
-        .mix-config-card {
+        .mix-pill-btn {
+          position: relative;
           background: var(--bg-panel);
           border: 1px solid var(--border-subtle);
-          border-radius: 8px;
-          padding: 12px 14px;
+          border-radius: 10px;
+          padding: 10px 12px;
           cursor: pointer;
           text-align: left;
           display: flex;
-          align-items: flex-start;
-          gap: 12px;
+          align-items: center;
+          gap: 10px;
           transition: all 0.15s ease;
           color: var(--text-primary);
+          min-height: 48px;
 
-          .mix-card-icon {
-            color: var(--text-secondary);
-            margin-top: 2px;
-            flex-shrink: 0;
+          &.mix-pill-compact {
+            padding: 8px 10px;
+            min-height: 44px;
+            gap: 8px;
           }
 
-          .mix-card-text {
+          .mix-pill-icon {
+            color: var(--text-secondary);
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.15s ease;
+          }
+
+          .mix-pill-info {
             min-width: 0;
             display: flex;
             flex-direction: column;
-            gap: 2px;
+            gap: 1px;
+            flex: 1;
 
-            .mix-card-head {
+            .mix-pill-label {
               font-size: 13px;
               font-weight: 600;
               color: var(--text-primary);
+              line-height: 1.2;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
             }
 
-            .mix-card-sub {
-              font-size: 11px;
-              color: var(--text-secondary);
-              line-height: 1.4;
+            .mix-pill-sub {
+              font-size: 10px;
+              color: var(--text-muted);
+              line-height: 1.2;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
             }
+          }
+
+          .mix-check-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #fafafa;
+            flex-shrink: 0;
+            margin-left: auto;
           }
 
           &:hover {
@@ -4829,8 +4937,12 @@
             border-color: var(--text-primary);
             box-shadow: 0 0 0 1px var(--text-primary);
 
-            .mix-card-icon {
+            .mix-pill-icon {
               color: var(--text-primary);
+            }
+
+            .mix-pill-info .mix-pill-sub {
+              color: var(--text-secondary);
             }
           }
         }
@@ -4842,9 +4954,10 @@
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 12px;
-    padding: 16px 24px;
+    gap: 10px;
+    padding: 14px 22px;
     border-top: 1px solid var(--border-subtle);
+    background: var(--bg-card);
 
     .btn-cancel {
       background: transparent;
@@ -4856,26 +4969,29 @@
       font-size: 13px;
       font-weight: 500;
       cursor: pointer;
+      transition: all 0.15s ease;
 
       &:hover {
         background: var(--bg-elevated);
         color: var(--text-primary);
+        border-color: var(--border-muted);
       }
     }
 
     .btn-primary {
       background: var(--text-primary);
-      color: var(--bg-canvas);
-      border: none;
+      border: 1px solid var(--text-primary);
+      color: #09090b;
       height: 38px;
       padding: 0 20px;
       border-radius: 8px;
       font-size: 13px;
       font-weight: 600;
       cursor: pointer;
+      transition: opacity 0.15s ease;
 
       &:hover {
-        background: #ffffff;
+        opacity: 0.9;
       }
     }
   }
@@ -4930,15 +5046,66 @@
     }
   }
 
-  .mix-settings-modal {
-    .mix-settings-body {
-      padding: 16px;
+  .mix-settings-dialog {
+    max-width: 100% !important;
+    width: 100% !important;
+    max-height: 88dvh !important;
+    border-radius: 18px 18px 0 0 !important;
+    border-bottom: none !important;
+    margin: 0 !important;
 
-      .mix-settings-section {
-        .mix-chips-grid,
-        .mix-chips-grid.mix-chips-grid-3 {
-          grid-template-columns: 1fr;
+    .modal-header {
+      padding: 16px 18px 12px;
+
+      .modal-title-group .modal-title {
+        font-size: 16px;
+      }
+    }
+
+    .mix-settings-body {
+      padding: 14px 18px 16px;
+      gap: 16px;
+      overflow-y: auto;
+
+      .mix-group {
+        .mix-pill-grid {
+          &.mix-pill-grid-2 {
+            grid-template-columns: repeat(2, 1fr);
+          }
+
+          &.mix-pill-grid-3 {
+            grid-template-columns: repeat(3, 1fr);
+          }
+
+          .mix-pill-btn {
+            min-height: 46px;
+            padding: 8px 10px;
+
+            .mix-pill-info .mix-pill-label {
+              font-size: 12px;
+            }
+
+            .mix-pill-info .mix-pill-sub {
+              font-size: 9.5px;
+            }
+          }
         }
+      }
+    }
+
+    .mix-settings-footer {
+      padding: 12px 18px calc(14px + env(safe-area-inset-bottom, 0px));
+
+      .btn-cancel {
+        flex: 1;
+        height: 42px;
+        font-size: 13px;
+      }
+
+      .btn-primary {
+        flex: 2;
+        height: 42px;
+        font-size: 13px;
       }
     }
   }
@@ -4962,6 +5129,7 @@
 /* ==========================================================================
    QUICK-START SMART MIX MODAL (COLD START)
    ========================================================================== */
+.quick-start-dialog,
 .quick-start-modal {
   max-width: 580px;
 
