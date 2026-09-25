@@ -1240,7 +1240,7 @@ export class LibraryService implements OnDestroy {
     this.playlists.set([]);
     this.activePlaylistId.set(null);
     this.radioStations.set([...this.defaultRadioStations]);
-    this.saveLocalWithoutCloudSync();
     this.isCloudSynced.set(false);
+    this.initLibrary();
   }
 }

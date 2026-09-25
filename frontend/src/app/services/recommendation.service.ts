@@ -58,6 +58,12 @@ export class RecommendationService {
     this.libraryService.setMixConfig({ mood });
   }
 
+  resetMixSession() {
+    this.isMixActive.set(false);
+    this.recentPlays.clear();
+    this.isFetchingDiscovery.set(false);
+  }
+
   updateConfig(partial: Partial<MixConfig>) {
     this.libraryService.setMixConfig(partial);
   }

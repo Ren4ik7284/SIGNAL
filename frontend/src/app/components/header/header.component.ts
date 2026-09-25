@@ -46,7 +46,7 @@ export class HeaderComponent {
 
   handleLogout() {
     this.closeUserMenu();
-    this.audioService.stopPlayback();
+    this.audioService.resetSessionAudio();
     this.authService.logout();
     this.libraryService.onUserLoggedOut();
   }

@@ -621,11 +621,23 @@ export class AudioService {
   stopPlayback() {
     try {
       this.audio.pause();
+      this.audio.currentTime = 0;
       this.audio.src = '';
     } catch {}
     this.isPlaying.set(false);
     this.currentTrack.set(null);
+    this.queue.set([]);
+    this.queueIndex.set(-1);
+    this.currentTime.set(0);
+    this.duration.set(0);
+    this.isReplenishingQueue = false;
+    this.recService.isMixActive.set(false);
     this.updateMediaSessionPlaybackState('none');
+  }
+
+  resetSessionAudio() {
+    this.stopPlayback();
+    this.recService.resetMixSession();
   }
 
   seek(seconds: number) {

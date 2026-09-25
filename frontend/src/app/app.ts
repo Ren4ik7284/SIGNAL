@@ -293,6 +293,7 @@ export class App implements OnInit {
               this.isAuthModalOpen.set(false);
               const username = this.authService.currentUser()?.username || 'пользователь';
               this.showToast(`Вход выполнен! С возвращением, ${username}!`);
+              this.audioService.resetSessionAudio();
               await this.libraryService.onUserLoggedIn();
             }
           }
@@ -365,6 +366,7 @@ export class App implements OnInit {
         this.authPasswordInput.set('');
         this.isAuthModalOpen.set(false);
         this.showToast(`Добро пожаловать, ${this.authService.currentUser()?.username || loginVal}!`);
+        this.audioService.resetSessionAudio();
         await this.libraryService.onUserLoggedIn();
       }
     } else if (this.authModalTab() === 'register') {
@@ -396,6 +398,7 @@ export class App implements OnInit {
         this.authPasswordInput.set('');
         this.isAuthModalOpen.set(false);
         this.showToast(`Регистрация успешна! Добро пожаловать, ${username}!`);
+        this.audioService.resetSessionAudio();
         await this.libraryService.onUserLoggedIn();
       }
     }
