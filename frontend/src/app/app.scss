@@ -4877,24 +4877,51 @@
       }
 
       .mix-grid-cards {
-        display: grid;
         width: 100%;
         box-sizing: border-box;
-        overflow-x: hidden;
 
         &.mix-grid-mood {
+          display: grid;
           grid-template-columns: repeat(2, 1fr);
           gap: 10px;
+          overflow-x: hidden;
         }
 
-        &.mix-grid-source {
-          grid-template-columns: repeat(3, 1fr);
-          gap: 10px;
-        }
-
+        &.mix-grid-source,
         &.mix-grid-lang {
-          grid-template-columns: repeat(3, 1fr);
+          display: flex;
+          flex-direction: row;
+          flex-wrap: nowrap;
+          overflow-x: auto;
+          overflow-y: hidden;
           gap: 10px;
+          padding-bottom: 6px;
+          scrollbar-width: thin;
+          scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+
+          &::-webkit-scrollbar {
+            height: 5px;
+          }
+
+          &::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.04);
+            border-radius: 3px;
+          }
+
+          &::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.25);
+            border-radius: 3px;
+
+            &:hover {
+              background: rgba(255, 255, 255, 0.45);
+            }
+          }
+
+          .mix-card-item {
+            flex: 0 0 240px;
+            width: 240px;
+            min-width: 240px;
+          }
         }
 
         .mix-card-item {
@@ -5179,18 +5206,38 @@
           overflow-x: hidden !important;
 
           &.mix-grid-mood {
-            grid-template-columns: repeat(2, 1fr);
+            display: grid !important;
+            grid-template-columns: repeat(2, 1fr) !important;
             gap: 8px;
+            overflow-x: hidden !important;
           }
 
           &.mix-grid-source {
-            grid-template-columns: 1fr;
+            display: grid !important;
+            grid-template-columns: 1fr !important;
             gap: 8px;
+            overflow-x: hidden !important;
+            padding-bottom: 0 !important;
+
+            .mix-card-item {
+              flex: none !important;
+              width: 100% !important;
+              min-width: 0 !important;
+            }
           }
 
           &.mix-grid-lang {
-            grid-template-columns: repeat(3, 1fr);
+            display: grid !important;
+            grid-template-columns: repeat(3, 1fr) !important;
             gap: 8px;
+            overflow-x: hidden !important;
+            padding-bottom: 0 !important;
+
+            .mix-card-item {
+              flex: none !important;
+              width: 100% !important;
+              min-width: 0 !important;
+            }
           }
 
           .mix-card-item {
