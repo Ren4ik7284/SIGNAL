@@ -27,6 +27,7 @@ use handlers::stream::stream_audio;
 
 pub type LoginAttempts = Arc<Mutex<HashMap<String, (u32, Instant)>>>;
 pub type EndpointRateLimits = Arc<Mutex<HashMap<String, (u32, Instant)>>>;
+pub type StreamCache = Arc<Mutex<HashMap<String, (String, Instant)>>>;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -34,6 +35,7 @@ pub struct AppState {
     pub login_attempts: LoginAttempts,
     pub endpoint_rate_limits: EndpointRateLimits,
     pub heavy_process_semaphore: Arc<tokio::sync::Semaphore>,
+    pub stream_cache: StreamCache,
 }
 
 #[tokio::main]
@@ -53,7 +55,8 @@ async fn main() {
         pool,
         login_attempts: Arc::new(Mutex::new(HashMap::new())),
         endpoint_rate_limits: Arc::new(Mutex::new(HashMap::new())),
-        heavy_process_semaphore: Arc::new(tokio::sync::Semaphore::new(8)),
+        heavy_process_semaphore: Arc::new(tokio::sync::Semaphore::new(16)),
+        stream_cache: Arc::new(Mutex::new(HashMap::new())),
     };
 
     let cors = if let Ok(origins_str) = std::env::var("ALLOWED_ORIGINS") {

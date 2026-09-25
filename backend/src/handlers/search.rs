@@ -70,9 +70,10 @@ pub async fn search_music(
     let yt_arg = format!("ytsearch10:{}", query);
     let sc_arg = format!("scsearch10:{}", query);
 
-    let (yt_res, sc_res) = tokio::join!(
-        execute_yt_dlp_search(&yt_cmd, &yt_arg, 12, &base_url),
-        execute_yt_dlp_search(&yt_cmd, &sc_arg, 12, &base_url),
+    let (audius_res, yt_res, sc_res) = tokio::join!(
+        execute_audius_search(query, 6, &base_url),
+        execute_yt_dlp_search(&yt_cmd, &yt_arg, 10, &base_url),
+        execute_yt_dlp_search(&yt_cmd, &sc_arg, 10, &base_url),
     );
 
     let mut combined = Vec::new();
@@ -91,6 +92,13 @@ pub async fn search_music(
         .into_iter()
         .filter(|t| is_valid_duration(t.duration))
         .collect();
+
+    // First add Audius tracks (direct instant streaming, daily independent releases)
+    for t in audius_res {
+        if seen_ids.insert(t.id.clone()) {
+            combined.push(t);
+        }
+    }
 
     let max_len = sc_filtered.len().max(yt_filtered.len());
     for i in 0..max_len {
@@ -382,4 +390,69 @@ pub async fn extract_info(
         is_radio_mix,
         has_chapters,
     }))
+}
+
+pub async fn execute_audius_search(query: &str, limit: usize, base_url: &str) -> Vec<SearchTrack> {
+    let url = format!(
+        "https://discoveryprovider.audius.co/v1/tracks/search?query={}&app_name=SIGNAL_MUSIC&limit={}",
+        urlencoding::encode(query),
+        limit
+    );
+    let client = match reqwest::Client::builder()
+        .timeout(Duration::from_millis(2200))
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
+        .build()
+    {
+        Ok(c) => c,
+        Err(_) => return Vec::new(),
+    };
+
+    let resp = match client.get(&url).send().await {
+        Ok(r) if r.status().is_success() => r,
+        _ => return Vec::new(),
+    };
+
+    let data: serde_json::Value = match resp.json().await {
+        Ok(v) => v,
+        Err(_) => return Vec::new(),
+    };
+
+    let mut tracks = Vec::new();
+    if let Some(items) = data["data"].as_array() {
+        for item in items {
+            let id = match item["id"].as_str() {
+                Some(s) if !s.is_empty() => s.to_string(),
+                _ => continue,
+            };
+            let title = item["title"].as_str().unwrap_or("Untitled").trim().to_string();
+            let artist = item["user"]["name"].as_str()
+                .or_else(|| item["user"]["handle"].as_str())
+                .unwrap_or("Audius Artist").trim().to_string();
+            let duration = item["duration"].as_f64().unwrap_or(0.0);
+
+            if duration > 600.0 || (duration > 0.0 && duration < 30.0) {
+                continue;
+            }
+
+            let cover_url = item["artwork"]["480x480"].as_str()
+                .or_else(|| item["artwork"]["150x150"].as_str())
+                .map(|u| u.to_string());
+
+            let direct_stream_url = format!("https://discoveryprovider.audius.co/v1/tracks/{}/stream?app_name=SIGNAL_MUSIC", id);
+            let encoded_url = urlencoding::encode(&direct_stream_url);
+            let encoded_title = urlencoding::encode(&title);
+            let encoded_artist = urlencoding::encode(&artist);
+            let audio_url = format!("{}/api/stream?url={}&title={}&artist={}", base_url, encoded_url, encoded_title, encoded_artist);
+
+            tracks.push(SearchTrack {
+                id: format!("audius-{}", id),
+                title,
+                artist,
+                duration,
+                audio_url,
+                cover_url,
+            });
+        }
+    }
+    tracks
 }

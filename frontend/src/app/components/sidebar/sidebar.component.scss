@@ -100,7 +100,7 @@
         overflow: hidden;
 
         .wave-icon {
-          color: #38bdf8;
+          color: var(--text-primary);
           transition: transform 0.2s ease;
         }
 
@@ -109,9 +109,9 @@
         }
 
         .wave-active-badge {
-          color: #38bdf8;
-          background: rgba(56, 189, 248, 0.12);
-          border: 1px solid rgba(56, 189, 248, 0.35);
+          color: var(--text-primary);
+          background: var(--bg-card);
+          border: 1px solid var(--border-subtle);
           padding: 1px 6px;
           border-radius: 4px;
           font-weight: 700;
@@ -119,9 +119,9 @@
         }
 
         &.active {
-          background: linear-gradient(90deg, rgba(56, 189, 248, 0.14) 0%, rgba(34, 197, 94, 0.08) 100%);
-          border-color: rgba(56, 189, 248, 0.3);
-          color: #fff;
+          background: var(--bg-card);
+          border-color: var(--border-focus);
+          color: var(--text-primary);
         }
       }
     }

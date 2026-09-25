@@ -4954,8 +4954,8 @@
 /* Mobile Bottom Nav Wave Item */
 .mobile-bottom-nav .m-nav-item.m-nav-wave {
   &.active {
-    color: #38bdf8;
-    svg { stroke: #38bdf8; }
+    color: var(--text-primary);
+    svg { stroke: var(--text-primary); }
   }
 }
 
@@ -4997,7 +4997,7 @@
         transition: all 0.15s ease;
 
         .qs-card-icon {
-          color: #38bdf8;
+          color: var(--text-primary);
         }
 
         .qs-card-info {
@@ -5019,8 +5019,8 @@
         }
 
         &:hover {
-          background: var(--bg-card-hover);
-          border-color: rgba(56, 189, 248, 0.4);
+          background: var(--bg-card-hover, #202024);
+          border-color: var(--border-focus, #3f3f46);
           transform: translateY(-2px);
         }
       }
@@ -5098,12 +5098,12 @@
         }
 
         &:hover {
-          background: rgba(56, 189, 248, 0.08);
-          border-color: rgba(56, 189, 248, 0.4);
+          background: var(--bg-card-hover, #202024);
+          border-color: var(--border-focus, #3f3f46);
           transform: translateY(-1px);
 
           svg {
-            color: #38bdf8;
+            color: var(--text-primary);
           }
         }
       }

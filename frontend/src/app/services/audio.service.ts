@@ -328,24 +328,33 @@ export class AudioService {
   }
 
   private handlePlaybackFailure(source: string) {
+    console.warn(`[AudioService] Playback failure from ${source}`);
     this.isPlaying.set(false);
     this.updateMediaSessionPlaybackState('paused');
 
-    if (this.recService.isMixActive()) {
-      this.consecutiveErrorCount++;
-      if (this.consecutiveErrorCount <= 4) {
-        const cur = this.currentTrack();
-        if (cur) {
-          this.recService.dislikeTrack(cur.id);
-        }
-        if (this.errorTimeoutId) clearTimeout(this.errorTimeoutId);
-        this.errorTimeoutId = setTimeout(() => {
-          this.next();
-        }, 600);
-        return;
-      }
+    if (this.errorTimeoutId) {
+      clearTimeout(this.errorTimeoutId);
+      this.errorTimeoutId = null;
     }
-    this.consecutiveErrorCount = 0;
+
+    // NEVER auto-skip or touch dislikes when user is playing their own library tracks
+    if (!this.recService.isMixActive()) {
+      this.consecutiveErrorCount = 0;
+      return;
+    }
+
+    this.consecutiveErrorCount++;
+    // In wave mode, max 2 skips with calm delay to avoid skipping loop
+    if (this.consecutiveErrorCount <= 2) {
+      this.errorTimeoutId = setTimeout(() => {
+        if (this.recService.isMixActive()) {
+          this.next();
+        }
+      }, 1500);
+    } else {
+      this.recService.isMixActive.set(false);
+      this.consecutiveErrorCount = 0;
+    }
   }
 
   private setupMediaSession() {
@@ -458,7 +467,17 @@ export class AudioService {
     } catch {}
   }
 
-  async playTrack(track: Track, newQueue?: Track[]) {
+  async playTrack(track: Track, newQueue?: Track[], fromMix: boolean = false) {
+    if (this.errorTimeoutId) {
+      clearTimeout(this.errorTimeoutId);
+      this.errorTimeoutId = null;
+    }
+
+    if (!fromMix) {
+      this.recService.isMixActive.set(false);
+      this.consecutiveErrorCount = 0;
+    }
+
     // 1. Initialize Web Audio API on user gesture
     this.initAudioContext();
     if (this.audioCtx && this.audioCtx.state === 'suspended') {
@@ -707,7 +726,7 @@ export class AudioService {
     await this.applyFadeOut(0.18);
 
     this.queueIndex.set(nextIdx);
-    this.playTrack(this.queue()[nextIdx]);
+    this.playTrack(this.queue()[nextIdx], undefined, this.recService.isMixActive());
 
     if (this.recService.isMixActive()) {
       this.ensureSmartQueue();
@@ -732,7 +751,7 @@ export class AudioService {
     await this.applyFadeOut(0.18);
 
     this.queueIndex.set(prevIdx);
-    this.playTrack(q[prevIdx]);
+    this.playTrack(q[prevIdx], undefined, this.recService.isMixActive());
   }
 
   private handleTrackEnded() {
@@ -844,11 +863,11 @@ export class AudioService {
         this.recService.isMixActive.set(false);
         return false;
       }
-      this.playTrack(discovery[0], discovery);
+      this.playTrack(discovery[0], discovery, true);
       return true;
     }
 
-    this.playTrack(candidates[0], candidates);
+    this.playTrack(candidates[0], candidates, true);
     this.ensureSmartQueue();
     return true;
   }

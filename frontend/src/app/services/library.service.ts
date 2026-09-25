@@ -101,6 +101,7 @@ export class LibraryService implements OnDestroy {
   }
 
   isDisliked(trackId: string): boolean {
+    if (this.tracks().some((t) => t.id === trackId && (!t.playlistOnly || t.isFavorite))) return false;
     return this.dislikedTrackIds().has(trackId);
   }
 
@@ -345,13 +346,13 @@ export class LibraryService implements OnDestroy {
       const data: { id: string; title: string; artist: string; duration: number; audio_url: string; cover_url?: string }[] = await res.json();
 
       const tracks: Track[] = data.map((item) => ({
-        id: 'yt-' + item.id,
+        id: item.id.startsWith('audius-') ? item.id : 'yt-' + item.id,
         title: item.title,
         artist: item.artist,
         duration: Math.round(item.duration),
         audioUrl: item.audio_url,
         coverUrl: this.formatCoverUrl(item.cover_url),
-        genre: 'YouTube',
+        genre: item.id.startsWith('audius-') ? 'Audius' : 'Online',
         format: 'mp3',
         bitrate: '192 kbps',
         plays: 0,
