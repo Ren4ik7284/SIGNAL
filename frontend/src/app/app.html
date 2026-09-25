@@ -238,11 +238,11 @@
                     <!-- Like / Favorite -->
                     <button 
                       class="wave-ctrl-btn wave-btn-like" 
-                      [class.active]="audioService.currentTrack()!.isFavorite"
-                      (click)="libraryService.toggleFavorite(audioService.currentTrack()!.id, audioService.currentTrack()!)" 
+                      [class.active]="libraryService.isTrackFavorite(audioService.currentTrack())"
+                      (click)="toggleFavorite(audioService.currentTrack()!, $event)" 
                       title="Нравится (в избранное)"
                     >
-                      <svg width="20" height="20" viewBox="0 0 24 24" [attr.fill]="audioService.currentTrack()!.isFavorite ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
+                      <svg width="20" height="20" viewBox="0 0 24 24" [attr.fill]="libraryService.isTrackFavorite(audioService.currentTrack()) ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
                         <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
                       </svg>
                     </button>
@@ -796,11 +796,11 @@
         </div>
         <button 
           class="sheet-fav-btn" 
-          [class.favorited]="cur.isFavorite"
-          (click)="toggleFavorite(cur)"
+          [class.favorited]="libraryService.isTrackFavorite(cur)"
+          (click)="toggleFavorite(cur, $event)"
           title="В избранное"
         >
-          <svg width="24" height="24" viewBox="0 0 24 24" [attr.fill]="cur.isFavorite ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
+          <svg width="24" height="24" viewBox="0 0 24 24" [attr.fill]="libraryService.isTrackFavorite(cur) ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
             <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
           </svg>
         </button>
@@ -2368,22 +2368,19 @@
 
   <!-- Mix Settings Modal (Smart Wave Customization) -->
   @if (isMixSettingsModalOpen()) {
-    <div class="modal-backdrop" (click)="closeMixSettings()">
+    <div class="modal-backdrop mix-backdrop" (click)="closeMixSettings()">
       <div class="modal-dialog mix-settings-dialog" (click)="$event.stopPropagation()">
+        <!-- Mobile drag handle indicator -->
+        <div class="mix-drag-handle mobile-only"></div>
+
         <!-- Header -->
-        <div class="modal-header">
+        <div class="modal-header mix-header">
           <div class="modal-title-group">
-            <div class="mix-tag-row">
-              <span class="mix-tag-pill font-mono">РЕКОМЕНДАЦИИ</span>
-              <span class="mix-status-dot"></span>
-              <span class="mix-tag-summary font-mono">
-                {{ recService.mixConfig().mood === 'all' ? 'Все стили' : recService.mixConfig().mood === 'energetic' ? 'Бодрое' : recService.mixConfig().mood === 'chill' ? 'Спокойное' : 'Любимое' }}
-                /
-                {{ recService.mixConfig().source === 'balanced' ? 'Микс' : recService.mixConfig().source === 'library_only' ? 'Медиатека' : 'Открытия' }}
-              </span>
-            </div>
+            <span class="modal-tag font-mono">РЕКОМЕНДАТЕЛЬНЫЙ ДВИЖОК</span>
             <h3 class="modal-title">Параметры Моей Волны</h3>
-            <p class="modal-subtitle">Тонкая настройка рекомендаций под ваше настроение</p>
+            <p class="mix-settings-desc">
+              Настройте персональный поток под себя. Выбранные параметры мгновенно применяются к волне и синхронизируются на всех ваших устройствах.
+            </p>
           </div>
           <button class="btn-close-sm" (click)="closeMixSettings()" title="Закрыть">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -2399,90 +2396,101 @@
           <div class="mix-group">
             <div class="mix-group-header">
               <span class="mix-group-title">Настроение и темп</span>
-              <span class="mix-group-hint">Вайб потока</span>
             </div>
-            <div class="mix-pill-grid mix-pill-grid-2">
+            <div class="mix-grid-cards mix-grid-mood">
+              <!-- All Styles -->
               <button 
                 type="button"
-                class="mix-pill-btn" 
+                class="mix-card-item" 
                 [class.active]="recService.mixConfig().mood === 'all'" 
                 (click)="updateMixMood('all')"
               >
-                <div class="mix-pill-icon">
-                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M12 12c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4Zm0 0c2 2.67 4 4 6 4a4 4 0 1 0 0-8c-2 0-4 1.33-6 4Z"/>
-                  </svg>
+                <div class="mix-card-head-row">
+                  <div class="mix-card-title-group">
+                    <div class="mix-card-icon-box">
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 12c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4Zm0 0c2 2.67 4 4 6 4a4 4 0 1 0 0-8c-2 0-4 1.33-6 4Z"/>
+                      </svg>
+                    </div>
+                    <span class="mix-card-name">Все стили</span>
+                  </div>
+                  <div class="mix-radio-circle" [class.checked]="recService.mixConfig().mood === 'all'">
+                    <div class="mix-radio-dot"></div>
+                  </div>
                 </div>
-                <div class="mix-pill-info">
-                  <span class="mix-pill-label">Все стили</span>
-                  <span class="mix-pill-sub">Любой темп</span>
-                </div>
-                @if (recService.mixConfig().mood === 'all') {
-                  <span class="mix-check-dot"></span>
-                }
+                <span class="mix-card-description">Сбалансированный поток любого темпа</span>
               </button>
 
+              <!-- Energetic -->
               <button 
                 type="button"
-                class="mix-pill-btn" 
+                class="mix-card-item" 
                 [class.active]="recService.mixConfig().mood === 'energetic'" 
                 (click)="updateMixMood('energetic')"
               >
-                <div class="mix-pill-icon">
-                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-                  </svg>
+                <div class="mix-card-head-row">
+                  <div class="mix-card-title-group">
+                    <div class="mix-card-icon-box">
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                      </svg>
+                    </div>
+                    <span class="mix-card-name">Бодрое</span>
+                  </div>
+                  <div class="mix-radio-circle" [class.checked]="recService.mixConfig().mood === 'energetic'">
+                    <div class="mix-radio-dot"></div>
+                  </div>
                 </div>
-                <div class="mix-pill-info">
-                  <span class="mix-pill-label">Бодрое</span>
-                  <span class="mix-pill-sub">Драйв & EDM</span>
-                </div>
-                @if (recService.mixConfig().mood === 'energetic') {
-                  <span class="mix-check-dot"></span>
-                }
+                <span class="mix-card-description">Драйв, высокий темп, фонк, рок, EDM</span>
               </button>
 
+              <!-- Chill -->
               <button 
                 type="button"
-                class="mix-pill-btn" 
+                class="mix-card-item" 
                 [class.active]="recService.mixConfig().mood === 'chill'" 
                 (click)="updateMixMood('chill')"
               >
-                <div class="mix-pill-icon">
-                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M18 8h1a4 4 0 0 1 0 8h-1"/>
-                    <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/>
-                    <line x1="6" y1="1" x2="6" y2="4"/>
-                    <line x1="10" y1="1" x2="10" y2="4"/>
-                  </svg>
+                <div class="mix-card-head-row">
+                  <div class="mix-card-title-group">
+                    <div class="mix-card-icon-box">
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M18 8h1a4 4 0 0 1 0 8h-1"/>
+                        <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/>
+                        <line x1="6" y1="1" x2="6" y2="4"/>
+                        <line x1="10" y1="1" x2="10" y2="4"/>
+                      </svg>
+                    </div>
+                    <span class="mix-card-name">Спокойное</span>
+                  </div>
+                  <div class="mix-radio-circle" [class.checked]="recService.mixConfig().mood === 'chill'">
+                    <div class="mix-radio-dot"></div>
+                  </div>
                 </div>
-                <div class="mix-pill-info">
-                  <span class="mix-pill-label">Спокойное</span>
-                  <span class="mix-pill-sub">Lo-Fi & Lounge</span>
-                </div>
-                @if (recService.mixConfig().mood === 'chill') {
-                  <span class="mix-check-dot"></span>
-                }
+                <span class="mix-card-description">Чиллаут, лоуфай, эмбиент, расслабление</span>
               </button>
 
+              <!-- Favorites -->
               <button 
                 type="button"
-                class="mix-pill-btn" 
+                class="mix-card-item" 
                 [class.active]="recService.mixConfig().mood === 'favorites'" 
                 (click)="updateMixMood('favorites')"
               >
-                <div class="mix-pill-icon">
-                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
-                  </svg>
+                <div class="mix-card-head-row">
+                  <div class="mix-card-title-group">
+                    <div class="mix-card-icon-box">
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
+                      </svg>
+                    </div>
+                    <span class="mix-card-name">Только любимое</span>
+                  </div>
+                  <div class="mix-radio-circle" [class.checked]="recService.mixConfig().mood === 'favorites'">
+                    <div class="mix-radio-dot"></div>
+                  </div>
                 </div>
-                <div class="mix-pill-info">
-                  <span class="mix-pill-label">Любимое</span>
-                  <span class="mix-pill-sub">Избранные треки</span>
-                </div>
-                @if (recService.mixConfig().mood === 'favorites') {
-                  <span class="mix-check-dot"></span>
-                }
+                <span class="mix-card-description">Избранное и часто прослушиваемые треки</span>
               </button>
             </div>
           </div>
@@ -2491,72 +2499,80 @@
           <div class="mix-group">
             <div class="mix-group-header">
               <span class="mix-group-title">Источник музыки</span>
-              <span class="mix-group-hint">Баланс треков</span>
             </div>
-            <div class="mix-pill-grid mix-pill-grid-3">
+            <div class="mix-grid-cards mix-grid-source">
+              <!-- Balanced -->
               <button 
                 type="button"
-                class="mix-pill-btn mix-pill-compact" 
+                class="mix-card-item" 
                 [class.active]="recService.mixConfig().source === 'balanced'" 
                 (click)="updateMixSource('balanced')"
               >
-                <div class="mix-pill-icon">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="10"/>
-                    <path d="m4.93 4.93 4.24 4.24"/>
-                    <path d="m14.83 9.17 4.24-4.24"/>
-                    <circle cx="12" cy="12" r="4"/>
-                  </svg>
+                <div class="mix-card-head-row">
+                  <div class="mix-card-title-group">
+                    <div class="mix-card-icon-box">
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="m4.93 4.93 4.24 4.24"/>
+                        <path d="m14.83 9.17 4.24-4.24"/>
+                        <circle cx="12" cy="12" r="4"/>
+                      </svg>
+                    </div>
+                    <span class="mix-card-name">Смешанный</span>
+                  </div>
+                  <div class="mix-radio-circle" [class.checked]="recService.mixConfig().source === 'balanced'">
+                    <div class="mix-radio-dot"></div>
+                  </div>
                 </div>
-                <div class="mix-pill-info">
-                  <span class="mix-pill-label">Смешанный</span>
-                  <span class="mix-pill-sub">Баланс 70/30</span>
-                </div>
-                @if (recService.mixConfig().source === 'balanced') {
-                  <span class="mix-check-dot"></span>
-                }
+                <span class="mix-card-description">70% ваша коллекция, 30% рекомендации и открытия</span>
               </button>
 
+              <!-- Library Only -->
               <button 
                 type="button"
-                class="mix-pill-btn mix-pill-compact" 
+                class="mix-card-item" 
                 [class.active]="recService.mixConfig().source === 'library_only'" 
                 (click)="updateMixSource('library_only')"
               >
-                <div class="mix-pill-icon">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/>
-                    <path d="M6 6h10"/>
-                  </svg>
+                <div class="mix-card-head-row">
+                  <div class="mix-card-title-group">
+                    <div class="mix-card-icon-box">
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/>
+                        <path d="M6 6h10"/>
+                      </svg>
+                    </div>
+                    <span class="mix-card-name">Только моя музыка</span>
+                  </div>
+                  <div class="mix-radio-circle" [class.checked]="recService.mixConfig().source === 'library_only'">
+                    <div class="mix-radio-dot"></div>
+                  </div>
                 </div>
-                <div class="mix-pill-info">
-                  <span class="mix-pill-label">Моя музыка</span>
-                  <span class="mix-pill-sub">Из каталога</span>
-                </div>
-                @if (recService.mixConfig().source === 'library_only') {
-                  <span class="mix-check-dot"></span>
-                }
+                <span class="mix-card-description">Исключительно треки из вашего каталога и плейлистов</span>
               </button>
 
+              <!-- Discovery Heavy -->
               <button 
                 type="button"
-                class="mix-pill-btn mix-pill-compact" 
+                class="mix-card-item" 
                 [class.active]="recService.mixConfig().source === 'discovery_heavy'" 
                 (click)="updateMixSource('discovery_heavy')"
               >
-                <div class="mix-pill-icon">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="11" cy="11" r="8"/>
-                    <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                  </svg>
+                <div class="mix-card-head-row">
+                  <div class="mix-card-title-group">
+                    <div class="mix-card-icon-box">
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"/>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                      </svg>
+                    </div>
+                    <span class="mix-card-name">Больше открытий</span>
+                  </div>
+                  <div class="mix-radio-circle" [class.checked]="recService.mixConfig().source === 'discovery_heavy'">
+                    <div class="mix-radio-dot"></div>
+                  </div>
                 </div>
-                <div class="mix-pill-info">
-                  <span class="mix-pill-label">Открытия</span>
-                  <span class="mix-pill-sub">Новые треки</span>
-                </div>
-                @if (recService.mixConfig().source === 'discovery_heavy') {
-                  <span class="mix-check-dot"></span>
-                }
+                <span class="mix-card-description">Новые похожие треки, подобранные по вкусу</span>
               </button>
             </div>
           </div>
@@ -2564,53 +2580,74 @@
           <!-- Section 3: Language Preference -->
           <div class="mix-group">
             <div class="mix-group-header">
-              <span class="mix-group-title">Языковой фильтр</span>
-              <span class="mix-group-hint">Язык звучания</span>
+              <span class="mix-group-title">Язык и направление</span>
             </div>
-            <div class="mix-pill-grid mix-pill-grid-3">
+            <div class="mix-grid-cards mix-grid-lang">
+              <!-- Any Language -->
               <button 
                 type="button"
-                class="mix-pill-btn mix-pill-compact" 
+                class="mix-card-item" 
                 [class.active]="recService.mixConfig().language === 'all'" 
                 (click)="updateMixLanguage('all')"
               >
-                <div class="mix-pill-info">
-                  <span class="mix-pill-label">Любой</span>
-                  <span class="mix-pill-sub">Без фильтра</span>
+                <div class="mix-card-head-row">
+                  <div class="mix-card-title-group">
+                    <div class="mix-card-icon-box">
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="2" y1="12" x2="22" y2="12"/>
+                        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z"/>
+                      </svg>
+                    </div>
+                    <span class="mix-card-name">Любой язык</span>
+                  </div>
+                  <div class="mix-radio-circle" [class.checked]="recService.mixConfig().language === 'all'">
+                    <div class="mix-radio-dot"></div>
+                  </div>
                 </div>
-                @if (recService.mixConfig().language === 'all') {
-                  <span class="mix-check-dot"></span>
-                }
+                <span class="mix-card-description">Без ограничений</span>
               </button>
 
+              <!-- Russian -->
               <button 
                 type="button"
-                class="mix-pill-btn mix-pill-compact" 
+                class="mix-card-item" 
                 [class.active]="recService.mixConfig().language === 'ru'" 
                 (click)="updateMixLanguage('ru')"
               >
-                <div class="mix-pill-info">
-                  <span class="mix-pill-label">Русский</span>
-                  <span class="mix-pill-sub">Только RU</span>
+                <div class="mix-card-head-row">
+                  <div class="mix-card-title-group">
+                    <div class="mix-card-icon-box">
+                      <span class="mix-icon-text font-mono">RU</span>
+                    </div>
+                    <span class="mix-card-name">Русская музыка</span>
+                  </div>
+                  <div class="mix-radio-circle" [class.checked]="recService.mixConfig().language === 'ru'">
+                    <div class="mix-radio-dot"></div>
+                  </div>
                 </div>
-                @if (recService.mixConfig().language === 'ru') {
-                  <span class="mix-check-dot"></span>
-                }
+                <span class="mix-card-description">Преимущественно на русском</span>
               </button>
 
+              <!-- Foreign -->
               <button 
                 type="button"
-                class="mix-pill-btn mix-pill-compact" 
+                class="mix-card-item" 
                 [class.active]="recService.mixConfig().language === 'en'" 
                 (click)="updateMixLanguage('en')"
               >
-                <div class="mix-pill-info">
-                  <span class="mix-pill-label">Зарубежный</span>
-                  <span class="mix-pill-sub">Иностранные</span>
+                <div class="mix-card-head-row">
+                  <div class="mix-card-title-group">
+                    <div class="mix-card-icon-box">
+                      <span class="mix-icon-text font-mono">EN</span>
+                    </div>
+                    <span class="mix-card-name">Зарубежная</span>
+                  </div>
+                  <div class="mix-radio-circle" [class.checked]="recService.mixConfig().language === 'en'">
+                    <div class="mix-radio-dot"></div>
+                  </div>
                 </div>
-                @if (recService.mixConfig().language === 'en') {
-                  <span class="mix-check-dot"></span>
-                }
+                <span class="mix-card-description">Иностранные и англоязычные</span>
               </button>
             </div>
           </div>

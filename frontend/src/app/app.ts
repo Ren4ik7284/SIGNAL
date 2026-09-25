@@ -218,8 +218,7 @@ export class App implements OnInit {
       const current = this.audioService.currentTrack();
       if (current) {
         event.preventDefault();
-        this.libraryService.toggleFavorite(current.id);
-        this.showToast(current.isFavorite ? 'Удалено из избранного' : 'Добавлено в избранное');
+        this.toggleFavorite(current);
       }
     } else if (event.key === 'v' || event.key === 'V' || event.key === 'м' || event.key === 'М') {
       event.preventDefault();
@@ -511,8 +510,9 @@ export class App implements OnInit {
 
   toggleFavorite(track: Track, event?: Event) {
     if (event) event.stopPropagation();
-    this.libraryService.toggleFavorite(track.id, track);
-    if (!track.isFavorite) {
+    const isNowFav = this.libraryService.toggleFavorite(track.id, track);
+    this.audioService.updateTrackFavoriteStatus(track.id, isNowFav, track);
+    if (isNowFav) {
       this.recService.recordTrackLike(track);
       this.showToast('Добавлено в избранное');
     } else {

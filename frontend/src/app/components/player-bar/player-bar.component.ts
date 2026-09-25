@@ -31,8 +31,9 @@ export class PlayerBarComponent {
   }
 
   toggleFavorite(track: Track) {
-    this.libraryService.toggleFavorite(track.id, track);
-    if (!track.isFavorite) {
+    const isNowFav = this.libraryService.toggleFavorite(track.id, track);
+    this.audioService.updateTrackFavoriteStatus(track.id, isNowFav, track);
+    if (isNowFav) {
       this.audioService.recService.recordTrackLike(track);
     }
   }

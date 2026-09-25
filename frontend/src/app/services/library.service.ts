@@ -678,30 +678,69 @@ export class LibraryService implements OnDestroy {
     this.pushLibraryToBackend();
   }
 
-  toggleFavorite(trackId: string, trackObj?: Track) {
-    const existing = this.tracks().find((t) => t.id === trackId);
+  isTrackFavorite(track: Track | null | undefined): boolean {
+    if (!track) return false;
+    const all = this.tracks();
+    const tId = track.id;
+    const audioUrl = track.audioUrl;
+    const normTitle = track.title ? track.title.trim().toLowerCase() : '';
+    const normArtist = track.artist ? track.artist.trim().toLowerCase() : '';
+
+    return all.some((t) => {
+      if (!t.isFavorite) return false;
+      if (t.id === tId) return true;
+      if (audioUrl && t.audioUrl && t.audioUrl === audioUrl) return true;
+      if (normTitle && normArtist && t.title && t.artist) {
+        if (t.title.trim().toLowerCase() === normTitle && t.artist.trim().toLowerCase() === normArtist) {
+          return true;
+        }
+      }
+      return false;
+    });
+  }
+
+  toggleFavorite(trackId: string, trackObj?: Track): boolean {
+    const all = this.tracks();
+    const audioUrl = trackObj?.audioUrl;
+    const normTitle = trackObj?.title ? trackObj.title.trim().toLowerCase() : '';
+    const normArtist = trackObj?.artist ? trackObj.artist.trim().toLowerCase() : '';
+
+    const existing = all.find((t) => {
+      if (t.id === trackId) return true;
+      if (audioUrl && t.audioUrl && t.audioUrl === audioUrl) return true;
+      if (normTitle && normArtist && t.title && t.artist) {
+        return t.title.trim().toLowerCase() === normTitle && t.artist.trim().toLowerCase() === normArtist;
+      }
+      return false;
+    });
+
+    let newStatus = true;
     if (!existing && trackObj) {
       const newTrack: Track = { ...trackObj, isFavorite: true, playlistOnly: false };
+      trackObj.isFavorite = true;
       this.tracks.update((cur) => [newTrack, ...cur]);
-      const favs = this.tracks()
-        .filter((t) => t.isFavorite)
-        .map((t) => t.id);
-      try {
-        localStorage.setItem(this.STORAGE_KEY_FAVORITES, JSON.stringify(favs));
-      } catch {}
-      this.persistTracks();
-      this.pushLibraryToBackend();
-      return;
+      newStatus = true;
+    } else if (existing) {
+      newStatus = !existing.isFavorite;
+      existing.isFavorite = newStatus;
+      if (trackObj) {
+        trackObj.isFavorite = newStatus;
+      }
+      this.tracks.update((current) =>
+        current.map((t) => {
+          if (t.id === existing.id || (audioUrl && t.audioUrl === audioUrl)) {
+            return { ...t, isFavorite: newStatus };
+          }
+          return t;
+        })
+      );
+    } else if (trackObj) {
+      const newTrack: Track = { ...trackObj, isFavorite: true, playlistOnly: false };
+      trackObj.isFavorite = true;
+      this.tracks.update((cur) => [newTrack, ...cur]);
+      newStatus = true;
     }
 
-    this.tracks.update((current) =>
-      current.map((t) => {
-        if (t.id === trackId) {
-          return { ...t, isFavorite: !t.isFavorite };
-        }
-        return t;
-      })
-    );
     const favs = this.tracks()
       .filter((t) => t.isFavorite)
       .map((t) => t.id);
@@ -710,6 +749,7 @@ export class LibraryService implements OnDestroy {
     } catch {}
     this.persistTracks();
     this.pushLibraryToBackend();
+    return newStatus;
   }
 
   addTrackToLibrary(track: Track) {

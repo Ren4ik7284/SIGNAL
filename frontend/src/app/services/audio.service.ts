@@ -503,7 +503,8 @@ export class AudioService {
       }
     }
 
-    this.currentTrack.set(track);
+    const isFav = this.libraryService.isTrackFavorite(track);
+    this.currentTrack.set({ ...track, isFavorite: isFav });
     this.streamSeekOffset.set(0);
     this.currentTime.set(0);
     this.hasRecordedCompletion = false;
@@ -885,6 +886,24 @@ export class AudioService {
       const newNext = this.recService.pickNextTracks(4, new Set(played.map((t) => t.id)));
       this.queue.set([...played, ...newNext]);
     }
+  }
+
+  updateTrackFavoriteStatus(trackId: string, isFavorite: boolean, trackObj?: Track) {
+    const cur = this.currentTrack();
+    if (cur) {
+      const match = cur.id === trackId || 
+        (trackObj && (cur.audioUrl === trackObj.audioUrl || (cur.title.toLowerCase() === trackObj.title.toLowerCase() && cur.artist.toLowerCase() === trackObj.artist.toLowerCase())));
+      if (match) {
+        this.currentTrack.set({ ...cur, isFavorite });
+      }
+    }
+    this.queue.update((q) =>
+      q.map((t) => {
+        const match = t.id === trackId || 
+          (trackObj && (t.audioUrl === trackObj.audioUrl || (t.title.toLowerCase() === trackObj.title.toLowerCase() && t.artist.toLowerCase() === trackObj.artist.toLowerCase())));
+        return match ? { ...t, isFavorite } : t;
+      })
+    );
   }
 
   dislikeCurrentTrack() {
