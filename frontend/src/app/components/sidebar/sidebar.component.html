@@ -17,24 +17,6 @@
         <span class="count-badge font-mono">{{ libraryService.allTracksCount() }}</span>
       </button>
 
-      <button 
-        class="nav-item smart-wave-item" 
-        [class.active]="audioService.recService.isMixActive()"
-        (click)="onMixClick()"
-      >
-        <svg class="wave-icon" [class.wave-anim]="audioService.recService.isMixActive() && audioService.isPlaying()" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M2 10v4"/>
-          <path d="M6 7v10"/>
-          <path d="M10 4v16"/>
-          <path d="M14 8v8"/>
-          <path d="M18 5v14"/>
-          <path d="M22 10v4"/>
-        </svg>
-        <span>Моя Волна</span>
-        @if (audioService.recService.isMixActive()) {
-          <span class="count-badge wave-active-badge font-mono">МИКС</span>
-        }
-      </button>
 
       <button 
         class="nav-item" 
