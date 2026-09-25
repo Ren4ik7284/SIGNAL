@@ -790,8 +790,11 @@ export class AudioService {
       const existingIds = new Set(q.map((t) => t.id));
       const nextCandidates = this.recService.pickNextTracks(2, existingIds);
 
-      // 70/30 rule: if we need more or every few tracks, fetch 1-2 discovery tracks from online
-      if (nextCandidates.length < 2 || Math.random() < 0.35) {
+      // Discovery rate according to source configuration
+      const source = this.recService.mixConfig().source;
+      const discoveryChance = source === 'library_only' ? 0 : (source === 'discovery_heavy' ? 0.6 : 0.3);
+
+      if (discoveryChance > 0 && (nextCandidates.length < 2 || Math.random() < discoveryChance)) {
         const discovery = await this.recService.fetchOnlineDiscoveryTracks(2, existingIds);
         for (const d of discovery) {
           nextCandidates.push(d);
@@ -809,7 +812,7 @@ export class AudioService {
 
   async startSmartMix(mood: MixMood = 'all'): Promise<boolean> {
     this.recService.isMixActive.set(true);
-    this.recService.currentMood.set(mood);
+    this.recService.setMixMood(mood);
 
     const candidates = this.recService.pickNextTracks(5);
     if (candidates.length === 0) {
@@ -832,7 +835,7 @@ export class AudioService {
   }
 
   setMixMood(mood: MixMood) {
-    this.recService.currentMood.set(mood);
+    this.recService.setMixMood(mood);
     if (this.recService.isMixActive()) {
       const q = this.queue();
       const idx = this.queueIndex();

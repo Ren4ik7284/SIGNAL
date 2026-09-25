@@ -37,3 +37,19 @@ export interface RadioStation {
   favicon?: string;
   isCustom?: boolean;
 }
+
+export type MixMood = 'all' | 'energetic' | 'chill' | 'favorites';
+export type MixSource = 'balanced' | 'library_only' | 'discovery_heavy';
+export type MixLanguage = 'all' | 'ru' | 'en';
+
+export interface MixConfig {
+  mood: MixMood;
+  source: MixSource;
+  language: MixLanguage;
+}
+
+export const DEFAULT_MIX_CONFIG: MixConfig = {
+  mood: 'all',
+  source: 'balanced',
+  language: 'all',
+};

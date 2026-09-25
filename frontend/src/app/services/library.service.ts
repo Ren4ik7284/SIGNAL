@@ -1,5 +1,5 @@
 import { Injectable, signal, computed, inject, OnDestroy } from '@angular/core';
-import { Track, Playlist, RadioStation } from '../models/track.model';
+import { Track, Playlist, RadioStation, MixConfig, DEFAULT_MIX_CONFIG } from '../models/track.model';
 import { OfflineService } from './offline.service';
 import { AuthService, HistoryItem, WrappedStats } from './auth.service';
 
@@ -45,6 +45,63 @@ export class LibraryService implements OnDestroy {
   }
   private get STORAGE_KEY_UPDATED_AT(): string {
     return `signal_updated_at_${this.storageUserId}`;
+  }
+  private get STORAGE_KEY_MIX_CONFIG(): string {
+    return `signal_mix_config_${this.storageUserId}`;
+  }
+  private get STORAGE_KEY_DISLIKES(): string {
+    return `signal_dislikes_${this.storageUserId}`;
+  }
+
+  readonly mixConfig = signal<MixConfig>(this.loadInitialMixConfig());
+  readonly dislikedTrackIds = signal<Set<string>>(this.loadInitialDislikes());
+
+  private loadInitialMixConfig(): MixConfig {
+    if (typeof localStorage === 'undefined') return { ...DEFAULT_MIX_CONFIG };
+    try {
+      const saved = localStorage.getItem(this.STORAGE_KEY_MIX_CONFIG);
+      if (saved) return { ...DEFAULT_MIX_CONFIG, ...JSON.parse(saved) };
+    } catch {}
+    return { ...DEFAULT_MIX_CONFIG };
+  }
+
+  private loadInitialDislikes(): Set<string> {
+    if (typeof localStorage === 'undefined') return new Set();
+    try {
+      const saved = localStorage.getItem(this.STORAGE_KEY_DISLIKES);
+      if (saved) return new Set(JSON.parse(saved));
+    } catch {}
+    return new Set();
+  }
+
+  setMixConfig(newConfig: Partial<MixConfig>) {
+    const updated = { ...this.mixConfig(), ...newConfig };
+    this.mixConfig.set(updated);
+    try {
+      localStorage.setItem(this.STORAGE_KEY_MIX_CONFIG, JSON.stringify(updated));
+    } catch {}
+    this.markUpdated();
+  }
+
+  dislikeTrack(trackId: string) {
+    this.dislikedTrackIds.update((set) => {
+      const next = new Set(set);
+      next.add(trackId);
+      return next;
+    });
+    try {
+      localStorage.setItem(this.STORAGE_KEY_DISLIKES, JSON.stringify(Array.from(this.dislikedTrackIds())));
+    } catch {}
+    const tr = this.tracks().find((t) => t.id === trackId);
+    if (tr && tr.isFavorite) {
+      this.toggleFavorite(trackId, tr);
+    } else {
+      this.markUpdated();
+    }
+  }
+
+  isDisliked(trackId: string): boolean {
+    return this.dislikedTrackIds().has(trackId);
   }
 
   readonly defaultTracks: Track[] = [];
@@ -488,6 +545,8 @@ export class LibraryService implements OnDestroy {
         tracks: this.tracks().filter((t) => !t.audioUrl.startsWith('blob:')),
         playlists: this.playlists(),
         radio_stations: this.radioStations(),
+        mix_config: this.mixConfig(),
+        disliked_ids: Array.from(this.dislikedTrackIds()),
       };
 
       const res = await fetch(`${this.getBackendUrl()}/api/sync`, {
@@ -518,6 +577,21 @@ export class LibraryService implements OnDestroy {
       if (!res.ok) return;
       const data = await res.json();
       if (!data) return;
+
+      if (data.mix_config) {
+        const mergedConfig: MixConfig = { ...DEFAULT_MIX_CONFIG, ...data.mix_config };
+        this.mixConfig.set(mergedConfig);
+        try {
+          localStorage.setItem(this.STORAGE_KEY_MIX_CONFIG, JSON.stringify(mergedConfig));
+        } catch {}
+      }
+      if (Array.isArray(data.disliked_ids)) {
+        const mergedDislikes = new Set([...this.dislikedTrackIds(), ...data.disliked_ids]);
+        this.dislikedTrackIds.set(mergedDislikes);
+        try {
+          localStorage.setItem(this.STORAGE_KEY_DISLIKES, JSON.stringify(Array.from(mergedDislikes)));
+        } catch {}
+      }
 
       const cloudUpdatedAt = typeof data.updated_at === 'number' ? data.updated_at : 0;
       const localUpdatedAt = this.getLocalUpdatedAt();

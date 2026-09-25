@@ -11,14 +11,14 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AudioService } from './services/audio.service';
 import { LibraryService, ExtractedResult } from './services/library.service';
-import { Track, Playlist, RadioStation } from './models/track.model';
+import { Track, Playlist, RadioStation, MixMood, MixSource, MixLanguage, MixConfig, DEFAULT_MIX_CONFIG } from './models/track.model';
 import { HeaderComponent } from './components/header/header.component';
 import { SidebarComponent } from './components/sidebar/sidebar.component';
 import { PlayerBarComponent } from './components/player-bar/player-bar.component';
 import { VisualizerComponent } from './components/visualizer/visualizer.component';
 import { OfflineService } from './services/offline.service';
 import { AuthService, HistoryItem, WrappedStats } from './services/auth.service';
-import { RecommendationService, MixMood } from './services/recommendation.service';
+import { RecommendationService } from './services/recommendation.service';
 
 declare global {
   interface Window {
@@ -42,6 +42,7 @@ export class App implements OnInit {
   readonly recService = inject(RecommendationService);
 
   readonly isQuickStartMixModalOpen = signal<boolean>(false);
+  readonly isMixSettingsModalOpen = signal<boolean>(false);
 
   readonly isAuthModalOpen = signal<boolean>(false);
   readonly authModalTab = signal<'login' | 'register'>('login');
@@ -641,6 +642,43 @@ export class App implements OnInit {
     if (ok) {
       this.showToast('Волна запущена!');
     }
+  }
+
+  openMixSettings() {
+    this.isMixSettingsModalOpen.set(true);
+  }
+
+  closeMixSettings() {
+    this.isMixSettingsModalOpen.set(false);
+  }
+
+  updateMixMood(mood: MixMood) {
+    this.libraryService.setMixConfig({ mood });
+    if (this.recService.isMixActive()) {
+      this.audioService.setMixMood(mood);
+    }
+  }
+
+  updateMixSource(source: MixSource) {
+    this.libraryService.setMixConfig({ source });
+    if (this.recService.isMixActive()) {
+      this.audioService.setMixMood(this.recService.currentMood());
+    }
+  }
+
+  updateMixLanguage(language: MixLanguage) {
+    this.libraryService.setMixConfig({ language });
+    if (this.recService.isMixActive()) {
+      this.audioService.setMixMood(this.recService.currentMood());
+    }
+  }
+
+  resetMixConfig() {
+    this.libraryService.setMixConfig(DEFAULT_MIX_CONFIG);
+    if (this.recService.isMixActive()) {
+      this.audioService.setMixMood('all');
+    }
+    this.showToast('Параметры волны сброшены по умолчанию');
   }
 
   dislikeCurrentTrack() {

@@ -16,13 +16,23 @@ pub async fn get_library(
         .map_err(|_| StatusCode::UNAUTHORIZED)?;
     let user_id = claims.sub;
 
-    let meta_row = sqlx::query("SELECT updated_at FROM user_sync_meta WHERE user_id = ?")
+    let meta_row = sqlx::query("SELECT updated_at, mix_settings, disliked_tracks FROM user_sync_meta WHERE user_id = ?")
         .bind(&user_id)
         .fetch_optional(&state.pool)
         .await
         .unwrap_or(None);
 
-    let updated_at: i64 = meta_row.and_then(|r| r.try_get("updated_at").ok()).unwrap_or(0);
+    let updated_at: i64 = meta_row.as_ref().and_then(|r| r.try_get("updated_at").ok()).unwrap_or(0);
+    let mix_config: Value = meta_row
+        .as_ref()
+        .and_then(|r| r.try_get::<String, _>("mix_settings").ok())
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_else(|| json!({ "mood": "all", "source": "balanced", "language": "all" }));
+    let disliked_ids: Value = meta_row
+        .as_ref()
+        .and_then(|r| r.try_get::<String, _>("disliked_tracks").ok())
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_else(|| json!([]));
 
     let track_rows = sqlx::query(
         r#"
@@ -149,6 +159,8 @@ pub async fn get_library(
         "tracks": tracks,
         "playlists": playlists,
         "radio_stations": radio_stations,
+        "mix_config": mix_config,
+        "disliked_ids": disliked_ids,
     })))
 }
 
@@ -182,18 +194,27 @@ pub async fn save_library(
         )
     })?;
 
+    let mix_settings_str = data.get("mix_config").map(|v| v.to_string());
+    let disliked_str = data.get("disliked_ids").map(|v| v.to_string());
+
     sqlx::query(
         r#"
-        INSERT INTO user_sync_meta (user_id, updated_at)
-        VALUES (?, ?)
-        ON CONFLICT(user_id) DO UPDATE SET updated_at = excluded.updated_at
+        INSERT INTO user_sync_meta (user_id, updated_at, mix_settings, disliked_tracks)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET 
+            updated_at = excluded.updated_at,
+            mix_settings = COALESCE(excluded.mix_settings, user_sync_meta.mix_settings),
+            disliked_tracks = COALESCE(excluded.disliked_tracks, user_sync_meta.disliked_tracks)
         "#,
     )
     .bind(&user_id)
     .bind(updated_at)
+    .bind(mix_settings_str)
+    .bind(disliked_str)
     .execute(&mut *tx)
     .await
-    .map_err(|_| {
+    .map_err(|e| {
+        eprintln!("Error saving sync meta: {}", e);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "error": "Ошибка обновления метаданных" })),

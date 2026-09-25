@@ -145,6 +145,9 @@ pub async fn init_db() -> Result<DbPool, sqlx::Error> {
     .execute(&pool)
     .await?;
 
+    let _ = sqlx::query("ALTER TABLE user_sync_meta ADD COLUMN mix_settings TEXT").execute(&pool).await;
+    let _ = sqlx::query("ALTER TABLE user_sync_meta ADD COLUMN disliked_tracks TEXT").execute(&pool).await;
+
     let _ = sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_history_user_played ON listening_history(user_id, played_at DESC)"
     ).execute(&pool).await;

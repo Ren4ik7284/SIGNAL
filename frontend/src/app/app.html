@@ -127,120 +127,177 @@
           }
 
           <!-- Smart Wave Hero Card (Моя Волна) -->
+          <!-- Smart Wave Centered Player Card (Моя Волна) -->
           @if (activeTab() === 'all') {
             <div class="smart-wave-card" [class.wave-active]="recService.isMixActive()">
-              <div class="wave-card-glow"></div>
-              <div class="wave-card-content">
-                <div class="wave-left-col">
-                  <div class="wave-avatar-pulse" (click)="toggleSmartMix(recService.currentMood())" title="Запустить волну">
-                    <div class="wave-bars-icon" [class.animating]="recService.isMixActive() && audioService.isPlaying()">
-                      <span></span><span></span><span></span><span></span><span></span>
-                    </div>
-                  </div>
+              <!-- Top bar with status and burger settings -->
+              <div class="wave-card-topbar">
+                <div class="wave-badge-group">
+                  <span class="wave-tag font-mono">
+                    @if (recService.isMixActive() && audioService.isPlaying()) {
+                      В ЭФИРЕ • МОЯ ВОЛНА
+                    } @else if (recService.isMixActive()) {
+                      НА ПАУЗЕ • МОЯ ВОЛНА
+                    } @else {
+                      ПЕРСОНАЛЬНЫЙ ПОТОК
+                    }
+                  </span>
+                  
+                  <span class="wave-config-chip font-mono">
+                    @if (recService.mixConfig().mood === 'energetic') { БОДРОЕ }
+                    @else if (recService.mixConfig().mood === 'chill') { СПОКОЙНОЕ }
+                    @else if (recService.mixConfig().mood === 'favorites') { ТОЛЬКО ЛЮБИМОЕ }
+                    @else { ВСЕ СТИЛИ }
+                    •
+                    @if (recService.mixConfig().source === 'library_only') { МОЯ МУЗЫКА }
+                    @else if (recService.mixConfig().source === 'discovery_heavy') { БОЛЬШЕ ОТКРЫТИЙ }
+                    @else { СМЕШАННЫЙ }
+                  </span>
 
-                  <div class="wave-info">
-                    <div class="wave-meta-top">
-                      <span class="wave-tag font-mono">
-                        @if (recService.isMixActive() && audioService.isPlaying()) {
-                          В ЭФИРЕ • LIVE
-                        } @else {
-                          ПЕРСОНАЛЬНЫЙ ПОТОК
-                        }
-                      </span>
-                      @if (recService.isFetchingDiscovery()) {
-                        <span class="wave-discovery-badge font-mono">
-                          <svg class="spin-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-                          ПОДБОР НОВИНОК...
-                        </span>
-                      }
-                    </div>
-                    <h2 class="wave-title">Моя Волна</h2>
-                    <p class="wave-desc">
-                      @if (recService.isMixActive()) {
-                        Бесконечный микс под ваш вкус • 70% медиатека, 30% открытия
-                      } @else {
-                        Персональный бесконечный поток на основе ваших любимых песен и вкусов
-                      }
-                    </p>
-                  </div>
+                  @if (recService.isFetchingDiscovery()) {
+                    <span class="wave-discovery-badge font-mono">
+                      <svg class="spin-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                      ПОДБОР...
+                    </span>
+                  }
                 </div>
 
-                <div class="wave-right-col">
-                  <!-- Mood Filter Chips (Clean SVGs, NO EMOJIS) -->
-                  <div class="wave-mood-chips">
-                    <button 
-                      class="mood-chip" 
-                      [class.active]="recService.currentMood() === 'all'" 
-                      (click)="toggleSmartMix('all')"
-                      title="Все стили"
-                    >
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M12 12c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4Zm0 0c2 2.67 4 4 6 4a4 4 0 1 0 0-8c-2 0-4 1.33-6 4Z"/>
-                      </svg>
-                      <span>Все</span>
-                    </button>
+                <button class="btn-wave-burger" (click)="openMixSettings()" title="Параметры Моей Волны">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="3" y1="6" x2="21" y2="6"/>
+                    <line x1="3" y1="12" x2="21" y2="12"/>
+                    <line x1="3" y1="18" x2="21" y2="18"/>
+                  </svg>
+                  <span>Параметры</span>
+                </button>
+              </div>
 
-                    <button 
-                      class="mood-chip" 
-                      [class.active]="recService.currentMood() === 'energetic'" 
-                      (click)="toggleSmartMix('energetic')"
-                      title="Бодрый темп и драйв"
-                    >
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-                      </svg>
-                      <span>Бодрое</span>
-                    </button>
+              <!-- Main Card Body -->
+              @if (recService.isMixActive() && audioService.currentTrack()) {
+                <div class="wave-playing-row">
+                  <!-- Track info & cover -->
+                  <div class="wave-track-meta">
+                    <div class="wave-track-cover">
+                      @if (audioService.currentTrack()!.coverUrl) {
+                        <img [src]="audioService.currentTrack()!.coverUrl" alt="Cover" />
+                      } @else {
+                        <div class="wave-cover-placeholder">
+                          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                            <path d="M9 18V5l12-2v13"/>
+                            <circle cx="6" cy="18" r="3"/>
+                            <circle cx="18" cy="16" r="3"/>
+                          </svg>
+                        </div>
+                      }
+                      <div class="wave-mini-bars" [class.animating]="audioService.isPlaying()">
+                        <span></span><span></span><span></span>
+                      </div>
+                    </div>
 
-                    <button 
-                      class="mood-chip" 
-                      [class.active]="recService.currentMood() === 'chill'" 
-                      (click)="toggleSmartMix('chill')"
-                      title="Спокойный чилл и релакс"
-                    >
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M18 8h1a4 4 0 0 1 0 8h-1"/>
-                        <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/>
-                        <line x1="6" y1="1" x2="6" y2="4"/>
-                        <line x1="10" y1="1" x2="10" y2="4"/>
-                      </svg>
-                      <span>Спокойное</span>
-                    </button>
-
-                    <button 
-                      class="mood-chip" 
-                      [class.active]="recService.currentMood() === 'favorites'" 
-                      (click)="toggleSmartMix('favorites')"
-                      title="Только избранные треки"
-                    >
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
-                      </svg>
-                      <span>Любимое</span>
-                    </button>
+                    <div class="wave-track-details">
+                      <div class="wave-track-title" [title]="audioService.currentTrack()!.title">
+                        {{ audioService.currentTrack()!.title }}
+                      </div>
+                      <div class="wave-track-artist" [title]="audioService.currentTrack()!.artist">
+                        {{ audioService.currentTrack()!.artist }}
+                      </div>
+                    </div>
                   </div>
 
-                  <!-- Main Wave Trigger Button -->
-                  <button 
-                    class="btn-wave-play" 
-                    (click)="toggleSmartMix(recService.currentMood())"
-                    [title]="recService.isMixActive() && audioService.isPlaying() ? 'Приостановить волну' : 'Включить Мою Волну'"
-                  >
-                    @if (recService.isMixActive() && audioService.isPlaying()) {
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                        <rect width="4" height="16" x="6" y="4" rx="1"/>
-                        <rect width="4" height="16" x="14" y="4" rx="1"/>
+                  <!-- Direct Track Controls (Prev, Dislike, Play/Pause, Like, Next, Playlist) -->
+                  <div class="wave-player-controls">
+                    <!-- Previous track -->
+                    <button class="wave-ctrl-btn" (click)="audioService.prev()" title="Предыдущий трек">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="19 20 9 12 19 4 19 20"/>
+                        <line x1="5" y1="19" x2="5" y2="5"/>
                       </svg>
-                      <span>Пауза</span>
-                    } @else {
+                    </button>
+
+                    <!-- Dislike (Exclude & Skip) -->
+                    <button class="wave-ctrl-btn wave-btn-dislike" (click)="dislikeCurrentTrack()" title="Не нравится (больше не рекомендовать)">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/>
+                      </svg>
+                    </button>
+
+                    <!-- Play / Pause -->
+                    <button class="wave-ctrl-btn wave-btn-play" (click)="audioService.togglePlay()" [title]="audioService.isPlaying() ? 'Пауза' : 'Воспроизведение'">
+                      @if (audioService.isPlaying()) {
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                          <rect width="4" height="16" x="6" y="4" rx="1"/>
+                          <rect width="4" height="16" x="14" y="4" rx="1"/>
+                        </svg>
+                      } @else {
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                          <polygon points="6 3 20 12 6 21 6 3"/>
+                        </svg>
+                      }
+                    </button>
+
+                    <!-- Like / Favorite -->
+                    <button 
+                      class="wave-ctrl-btn wave-btn-like" 
+                      [class.active]="audioService.currentTrack()!.isFavorite"
+                      (click)="libraryService.toggleFavorite(audioService.currentTrack()!.id, audioService.currentTrack()!)" 
+                      title="Нравится (в избранное)"
+                    >
+                      <svg width="20" height="20" viewBox="0 0 24 24" [attr.fill]="audioService.currentTrack()!.isFavorite ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
+                        <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
+                      </svg>
+                    </button>
+
+                    <!-- Next track -->
+                    <button class="wave-ctrl-btn" (click)="audioService.next()" title="Следующий трек">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="5 4 15 12 5 20 5 4"/>
+                        <line x1="19" y1="5" x2="19" y2="19"/>
+                      </svg>
+                    </button>
+
+                    <!-- Add to playlist -->
+                    <button class="wave-ctrl-btn" (click)="openAddToPlaylistModal(audioService.currentTrack()!)" title="Добавить в плейлист">
+                      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15V6"/>
+                        <path d="M18.5 18a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"/>
+                        <path d="M12 12H3"/>
+                        <path d="M16 6H3"/>
+                        <path d="M12 18H3"/>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              } @else {
+                <!-- Idle State: Launch Hero -->
+                <div class="wave-idle-row">
+                  <div class="wave-idle-info">
+                    <div class="wave-avatar-icon">
+                      <div class="wave-bars-icon">
+                        <span></span><span></span><span></span><span></span><span></span>
+                      </div>
+                    </div>
+                    <div class="wave-idle-text">
+                      <h2 class="wave-title">Моя Волна</h2>
+                      <p class="wave-desc">
+                        Бесконечный умный поток музыки, настроенный под ваши интересы и вкус.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div class="wave-idle-actions">
+                    <button 
+                      class="btn-wave-start" 
+                      (click)="toggleSmartMix(recService.currentMood())"
+                      title="Включить Мою Волну"
+                    >
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                         <polygon points="6 3 20 12 6 21 6 3"/>
                       </svg>
-                      <span>Слушать</span>
-                    }
-                  </button>
+                      <span>Запустить волну</span>
+                    </button>
+                  </div>
                 </div>
-              </div>
+              }
             </div>
           }
         </div>
@@ -2303,6 +2360,234 @@
         <div class="modal-footer">
           <button class="btn-cancel" style="width: 100%; text-align: center;" (click)="isQuickStartMixModalOpen.set(false)">
             Отмена
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- Mix Settings Modal (Burger Drawer / Modal) -->
+  @if (isMixSettingsModalOpen()) {
+    <div class="modal-overlay" (click)="closeMixSettings()">
+      <div class="modal-card mix-settings-modal" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <div class="modal-title-wrap">
+            <span class="modal-tag font-mono">РЕКОМЕНДАТЕЛЬНЫЙ ДВИЖОК</span>
+            <h3 class="modal-title">Параметры Моей Волны</h3>
+          </div>
+          <button class="btn-modal-close" (click)="closeMixSettings()" title="Закрыть">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="modal-body mix-settings-body">
+          <p class="mix-settings-desc">
+            Настройте персональный поток под себя. Выбранные параметры мгновенно применяются к волне и синхронизируются на всех ваших устройствах.
+          </p>
+
+          <!-- Section 1: Mood & Vibe -->
+          <div class="mix-settings-section">
+            <label class="mix-section-title">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
+                <line x1="9" y1="9" x2="9.01" y2="9"/>
+                <line x1="15" y1="9" x2="15.01" y2="9"/>
+              </svg>
+              <span>Настроение и темп</span>
+            </label>
+            <div class="mix-chips-grid">
+              <button 
+                class="mix-config-card" 
+                [class.active]="recService.mixConfig().mood === 'all'" 
+                (click)="updateMixMood('all')"
+              >
+                <div class="mix-card-icon">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 12c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4Zm0 0c2 2.67 4 4 6 4a4 4 0 1 0 0-8c-2 0-4 1.33-6 4Z"/>
+                  </svg>
+                </div>
+                <div class="mix-card-text">
+                  <span class="mix-card-head">Все стили</span>
+                  <span class="mix-card-sub">Сбалансированный поток любого темпа</span>
+                </div>
+              </button>
+
+              <button 
+                class="mix-config-card" 
+                [class.active]="recService.mixConfig().mood === 'energetic'" 
+                (click)="updateMixMood('energetic')"
+              >
+                <div class="mix-card-icon">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                  </svg>
+                </div>
+                <div class="mix-card-text">
+                  <span class="mix-card-head">Бодрое</span>
+                  <span class="mix-card-sub">Драйв, высокий темп, фонк, рок, EDM</span>
+                </div>
+              </button>
+
+              <button 
+                class="mix-config-card" 
+                [class.active]="recService.mixConfig().mood === 'chill'" 
+                (click)="updateMixMood('chill')"
+              >
+                <div class="mix-card-icon">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 8h1a4 4 0 0 1 0 8h-1"/>
+                    <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/>
+                    <line x1="6" y1="1" x2="6" y2="4"/>
+                    <line x1="10" y1="1" x2="10" y2="4"/>
+                  </svg>
+                </div>
+                <div class="mix-card-text">
+                  <span class="mix-card-head">Спокойное</span>
+                  <span class="mix-card-sub">Чиллаут, лоуфай, эмбиент, расслабление</span>
+                </div>
+              </button>
+
+              <button 
+                class="mix-config-card" 
+                [class.active]="recService.mixConfig().mood === 'favorites'" 
+                (click)="updateMixMood('favorites')"
+              >
+                <div class="mix-card-icon">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
+                  </svg>
+                </div>
+                <div class="mix-card-text">
+                  <span class="mix-card-head">Только любимое</span>
+                  <span class="mix-card-sub">Избранное и часто прослушиваемые треки</span>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          <!-- Section 2: Source Balance -->
+          <div class="mix-settings-section">
+            <label class="mix-section-title">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/>
+              </svg>
+              <span>Источник музыки</span>
+            </label>
+            <div class="mix-chips-grid">
+              <button 
+                class="mix-config-card" 
+                [class.active]="recService.mixConfig().source === 'balanced'" 
+                (click)="updateMixSource('balanced')"
+              >
+                <div class="mix-card-icon">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="m4.93 4.93 4.24 4.24"/>
+                    <path d="m14.83 9.17 4.24-4.24"/>
+                    <path d="m14.83 14.83 4.24 4.24"/>
+                    <path d="m9.17 14.83-4.24 4.24"/>
+                    <circle cx="12" cy="12" r="4"/>
+                  </svg>
+                </div>
+                <div class="mix-card-text">
+                  <span class="mix-card-head">Смешанный</span>
+                  <span class="mix-card-sub">70% ваша коллекция, 30% рекомендации и открытия</span>
+                </div>
+              </button>
+
+              <button 
+                class="mix-config-card" 
+                [class.active]="recService.mixConfig().source === 'library_only'" 
+                (click)="updateMixSource('library_only')"
+              >
+                <div class="mix-card-icon">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/>
+                    <path d="M6 6h10"/>
+                    <path d="M6 10h10"/>
+                  </svg>
+                </div>
+                <div class="mix-card-text">
+                  <span class="mix-card-head">Только моя музыка</span>
+                  <span class="mix-card-sub">Исключительно треки из вашего каталога и плейлистов</span>
+                </div>
+              </button>
+
+              <button 
+                class="mix-config-card" 
+                [class.active]="recService.mixConfig().source === 'discovery_heavy'" 
+                (click)="updateMixSource('discovery_heavy')"
+              >
+                <div class="mix-card-icon">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"/>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                  </svg>
+                </div>
+                <div class="mix-card-text">
+                  <span class="mix-card-head">Больше открытий</span>
+                  <span class="mix-card-sub">Новые похожие треки, подобранные по вкусу</span>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          <!-- Section 3: Language Preference -->
+          <div class="mix-settings-section">
+            <label class="mix-section-title">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="2" y1="12" x2="22" y2="12"/>
+                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+              </svg>
+              <span>Язык и направление</span>
+            </label>
+            <div class="mix-chips-grid mix-chips-grid-3">
+              <button 
+                class="mix-config-card" 
+                [class.active]="recService.mixConfig().language === 'all'" 
+                (click)="updateMixLanguage('all')"
+              >
+                <div class="mix-card-text">
+                  <span class="mix-card-head">Любой язык</span>
+                  <span class="mix-card-sub">Без ограничений</span>
+                </div>
+              </button>
+
+              <button 
+                class="mix-config-card" 
+                [class.active]="recService.mixConfig().language === 'ru'" 
+                (click)="updateMixLanguage('ru')"
+              >
+                <div class="mix-card-text">
+                  <span class="mix-card-head">Русская музыка</span>
+                  <span class="mix-card-sub">Преимущественно на русском</span>
+                </div>
+              </button>
+
+              <button 
+                class="mix-config-card" 
+                [class.active]="recService.mixConfig().language === 'en'" 
+                (click)="updateMixLanguage('en')"
+              >
+                <div class="mix-card-text">
+                  <span class="mix-card-head">Зарубежная</span>
+                  <span class="mix-card-sub">Иностранные и англоязычные</span>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer mix-settings-footer">
+          <button class="btn-cancel" (click)="resetMixConfig()">
+            Сбросить
+          </button>
+          <button class="btn-primary" (click)="closeMixSettings()">
+            Готово
           </button>
         </div>
       </div>

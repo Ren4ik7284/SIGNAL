@@ -1,8 +1,8 @@
 import { Injectable, signal, computed, inject } from '@angular/core';
-import { Track } from '../models/track.model';
+import { Track, MixConfig, MixMood, MixSource, MixLanguage } from '../models/track.model';
 import { LibraryService } from './library.service';
 
-export type MixMood = 'all' | 'energetic' | 'chill' | 'favorites';
+export type { MixMood };
 
 export interface TasteVector {
   energy: number;     // 0 (ambient/soft) -> 1 (heavy bass/phonk/rock)
@@ -36,7 +36,8 @@ export class RecommendationService {
   private readonly STORAGE_KEY_DISLIKES = 'recro_disliked_tracks_v1';
 
   readonly isMixActive = signal<boolean>(false);
-  readonly currentMood = signal<MixMood>('all');
+  readonly mixConfig = this.libraryService.mixConfig;
+  readonly currentMood = computed<MixMood>(() => this.libraryService.mixConfig().mood);
   readonly isFetchingDiscovery = signal<boolean>(false);
 
   // User Taste Vector in reactive state
@@ -46,11 +47,19 @@ export class RecommendationService {
   // Map of trackId -> epoch timestamp (ms)
   private recentPlays = new Map<string, number>();
 
-  // Disliked tracks (set of track IDs)
-  readonly dislikedTrackIds = signal<Set<string>>(this.loadDislikedTracks());
+  // Disliked tracks (delegated to LibraryService with cloud sync)
+  readonly dislikedTrackIds = this.libraryService.dislikedTrackIds;
 
   constructor() {
     this.cleanupOldPlays();
+  }
+
+  setMixMood(mood: MixMood) {
+    this.libraryService.setMixConfig({ mood });
+  }
+
+  updateConfig(partial: Partial<MixConfig>) {
+    this.libraryService.setMixConfig(partial);
   }
 
   private loadSavedTasteVector(): TasteVector {
@@ -68,24 +77,6 @@ export class RecommendationService {
     if (typeof localStorage === 'undefined') return;
     try {
       localStorage.setItem(this.STORAGE_KEY_TASTE, JSON.stringify(vec));
-    } catch {}
-  }
-
-  private loadDislikedTracks(): Set<string> {
-    if (typeof localStorage === 'undefined') return new Set();
-    try {
-      const saved = localStorage.getItem(this.STORAGE_KEY_DISLIKES);
-      if (saved) {
-        return new Set(JSON.parse(saved));
-      }
-    } catch {}
-    return new Set();
-  }
-
-  private persistDislikes() {
-    if (typeof localStorage === 'undefined') return;
-    try {
-      localStorage.setItem(this.STORAGE_KEY_DISLIKES, JSON.stringify(Array.from(this.dislikedTrackIds())));
     } catch {}
   }
 
@@ -255,19 +246,14 @@ export class RecommendationService {
   }
 
   /**
-   * Dislike track: instantly adds to blacklist, nudges vector, and prevents from playing.
+   * Dislike track: adds to blacklist in LibraryService (synced with cloud), nudges vector, and prevents from playing.
    */
   dislikeTrack(trackId: string) {
-    this.dislikedTrackIds.update((set) => {
-      const next = new Set(set);
-      next.add(trackId);
-      return next;
-    });
-    this.persistDislikes();
+    this.libraryService.dislikeTrack(trackId);
   }
 
   isDisliked(trackId: string): boolean {
-    return this.dislikedTrackIds().has(trackId);
+    return this.libraryService.isDisliked(trackId);
   }
 
   /**
@@ -339,6 +325,16 @@ export class RecommendationService {
     }
     if (track.plays && track.plays > 0) {
       score += Math.min(15, track.plays * 1.5);
+    }
+
+    // Language preference
+    const lang = this.libraryService.mixConfig().language;
+    if (lang === 'ru') {
+      const isRu = /[а-яё]/i.test(`${track.title} ${track.artist} ${track.genre || ''}`);
+      score += isRu ? 35 : -35;
+    } else if (lang === 'en') {
+      const isRu = /[а-яё]/i.test(`${track.title} ${track.artist} ${track.genre || ''}`);
+      score += !isRu ? 35 : -35;
     }
 
     // Fatigue penalty (Cooldown)
@@ -416,26 +412,50 @@ export class RecommendationService {
    */
   async fetchOnlineDiscoveryTracks(count = 3, excludeIds: Set<string> = new Set()): Promise<Track[]> {
     if (this.isFetchingDiscovery()) return [];
+    if (this.libraryService.mixConfig().source === 'library_only') return [];
     this.isFetchingDiscovery.set(true);
 
     try {
       const candidates = this.getAllLocalCandidates();
+      const mood = this.currentMood();
+      const lang = this.libraryService.mixConfig().language;
       let query = '';
 
-      const mood = this.currentMood();
-      if (mood === 'energetic') {
-        const energeticQueries = ['phonk workout mix', 'electronic synthwave mix', 'rock hits 2024', 'trap bass mix'];
-        query = energeticQueries[Math.floor(Math.random() * energeticQueries.length)];
-      } else if (mood === 'chill') {
-        const chillQueries = ['lofi chill hip hop', 'acoustic chill music', 'relaxing ambient lounge', 'chill vocal hits'];
-        query = chillQueries[Math.floor(Math.random() * chillQueries.length)];
-      } else {
-        // Pick top artist from library or taste
-        if (candidates.length > 0) {
-          const randomTrack = candidates[Math.floor(Math.random() * candidates.length)];
-          query = `${randomTrack.artist} similar music`;
+      if (lang === 'ru') {
+        if (mood === 'energetic') {
+          const ruEnergetic = ['русский фонк хиты', 'русский рэп новинки', 'русский рок драйв', 'русский дрилл'];
+          query = ruEnergetic[Math.floor(Math.random() * ruEnergetic.length)];
+        } else if (mood === 'chill') {
+          const ruChill = ['русский инди чилл', 'русский лоуфай', 'русская меланхолия', 'акустика русский рок'];
+          query = ruChill[Math.floor(Math.random() * ruChill.length)];
+        } else {
+          const ruGeneral = ['русские хиты 2024', 'популярная русская музыка', 'лучшие русские треки'];
+          query = ruGeneral[Math.floor(Math.random() * ruGeneral.length)];
+        }
+      } else if (lang === 'en') {
+        if (mood === 'energetic') {
+          const enEnergetic = ['phonk workout mix', 'electronic synthwave mix', 'rock hits 2024', 'trap bass mix'];
+          query = enEnergetic[Math.floor(Math.random() * enEnergetic.length)];
+        } else if (mood === 'chill') {
+          const enChill = ['lofi chill hip hop', 'acoustic chill music', 'relaxing ambient lounge', 'chill vocal hits'];
+          query = enChill[Math.floor(Math.random() * enChill.length)];
         } else {
           query = 'popular hits mix 2024';
+        }
+      } else {
+        if (mood === 'energetic') {
+          const energeticQueries = ['phonk workout mix', 'electronic synthwave mix', 'rock hits 2024', 'trap bass mix'];
+          query = energeticQueries[Math.floor(Math.random() * energeticQueries.length)];
+        } else if (mood === 'chill') {
+          const chillQueries = ['lofi chill hip hop', 'acoustic chill music', 'relaxing ambient lounge', 'chill vocal hits'];
+          query = chillQueries[Math.floor(Math.random() * chillQueries.length)];
+        } else {
+          if (candidates.length > 0) {
+            const randomTrack = candidates[Math.floor(Math.random() * candidates.length)];
+            query = `${randomTrack.artist} similar music`;
+          } else {
+            query = 'popular hits mix 2024';
+          }
         }
       }
 
