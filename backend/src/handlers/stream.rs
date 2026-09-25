@@ -48,40 +48,49 @@ fn clean_music_title(title: &str) -> String {
             break;
         }
     }
-    let noise_patterns = [
-        "official music video",
-        "official video",
-        "official audio",
-        "lyric video",
-        "lyrics",
-        "visualizer",
-        "audio",
-        "clip officiel",
-        "remastered",
-        "4k",
-        "hd",
-        "hq",
-        "live in",
-        "full album",
-        "official",
-    ];
-    let lower = s.to_lowercase();
-    for pat in noise_patterns {
-        if let Some(pos) = lower.find(pat) {
-            let start = s[..pos].rfind('(');
-            let end = s[pos..].find(')');
-            if let (Some(open), Some(close)) = (start, end) {
-                if pos + close < s.len() {
-                    s.replace_range(open..=pos + close, " ");
-                }
-            }
+    while let Some(open) = s.find('(') {
+        if let Some(close) = s[open..].find(')') {
+            s.replace_range(open..=open + close, " ");
+        } else {
+            break;
+        }
+    }
+    while let Some(open) = s.find('{') {
+        if let Some(close) = s[open..].find('}') {
+            s.replace_range(open..=open + close, " ");
+        } else {
+            break;
         }
     }
     if let Some(pipe) = s.find('|') {
         s.truncate(pipe);
     }
-    s = s.replace(" - Topic", "");
-    s.split_whitespace().collect::<Vec<_>>().join(" ")
+    let mut cleaned = String::with_capacity(s.len());
+    for c in s.chars() {
+        if c.is_alphanumeric() || c == ' ' || c == '-' {
+            cleaned.push(c);
+        } else {
+            cleaned.push(' ');
+        }
+    }
+
+    let noise_words = [
+        "official music video", "official video", "official audio", "official",
+        "lyric video", "lyrics", "visualizer", "audio", "clip officiel",
+        "remastered", "4k", "hd", "hq", "live in", "full album", "сборник песен",
+        "премьера клипа", "премьера песни", "клип", "новинки", "новинка", "хиты",
+        "music video", "original mix", "extended mix", "topic",
+    ];
+
+    let mut lower = cleaned.to_lowercase();
+    for word in noise_words {
+        while let Some(idx) = lower.find(word) {
+            cleaned.replace_range(idx..idx + word.len(), " ");
+            lower.replace_range(idx..idx + word.len(), " ");
+        }
+    }
+
+    cleaned.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 pub async fn stream_audio(
@@ -173,7 +182,7 @@ pub async fn stream_audio(
     } else if target.contains("soundcloud.com") || target.starts_with("scsearch") {
         let mut sc_cmd = Command::new(&yt_cmd);
         apply_yt_dlp_common_args_no_cookies(&mut sc_cmd);
-        sc_cmd.args(["--no-playlist", "-g", "-f", "bestaudio/b", "--", &target]);
+        sc_cmd.args(["--no-playlist", "--ignore-errors", "-g", "-f", "bestaudio/b", "--", &target]);
         if let Ok(Ok(out)) = tokio::time::timeout(Duration::from_secs(6), sc_cmd.output()).await {
             if let Some(u) = extract_stream_url_from_output(&out) {
                 direct_url = u;
@@ -183,7 +192,7 @@ pub async fn stream_audio(
         if direct_url.is_empty() {
             let mut sc_cmd2 = Command::new(&yt_cmd);
             apply_yt_dlp_common_args(&mut sc_cmd2);
-            sc_cmd2.args(["--no-playlist", "-g", "-f", "bestaudio/b", "--", &target]);
+            sc_cmd2.args(["--no-playlist", "--ignore-errors", "-g", "-f", "bestaudio/b", "--", &target]);
             if let Ok(Ok(out)) = tokio::time::timeout(Duration::from_secs(4), sc_cmd2.output()).await {
                 if let Some(u) = extract_stream_url_from_output(&out) {
                     direct_url = u;
@@ -192,18 +201,46 @@ pub async fn stream_audio(
         }
 
         if direct_url.is_empty() {
-            let title = params.title.as_deref().unwrap_or("").trim();
-            let artist = params.artist.as_deref().unwrap_or("").trim();
-            if !title.is_empty() {
-                let clean = clean_music_title(title);
-                let query = if !artist.is_empty() {
-                    format!("scsearch2:{} {}", clean, artist)
+            let mut title = params.title.as_deref().unwrap_or("").trim().to_string();
+            let mut artist = params.artist.as_deref().unwrap_or("").trim().to_string();
+
+            // If title is missing, extract from SoundCloud URL slug
+            if title.is_empty() && target.contains("soundcloud.com/") {
+                if let Some(path) = target.split("soundcloud.com/").nth(1) {
+                    let parts: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+                    if parts.len() >= 2 {
+                        artist = parts[0].replace('-', " ");
+                        title = parts[1].replace('-', " ");
+                    } else if parts.len() == 1 {
+                        title = parts[0].replace('-', " ");
+                    }
+                }
+            }
+
+            let clean = clean_music_title(&title);
+            let clean_art = clean_music_title(&artist);
+
+            if !clean.is_empty() {
+                let query = if !clean_art.is_empty() {
+                    format!("scsearch5:{} {}", clean, clean_art)
                 } else {
-                    format!("scsearch2:{}", clean)
+                    format!("scsearch5:{}", clean)
                 };
                 let mut alt_cmd = Command::new(&yt_cmd);
                 apply_yt_dlp_common_args_no_cookies(&mut alt_cmd);
-                alt_cmd.args(["--no-playlist", "-g", "-f", "bestaudio/b", "--", &query]);
+                alt_cmd.args(["--no-playlist", "--ignore-errors", "-g", "-f", "bestaudio/b", "--", &query]);
+                if let Ok(Ok(alt_out)) = tokio::time::timeout(Duration::from_secs(6), alt_cmd.output()).await {
+                    if let Some(u) = extract_stream_url_from_output(&alt_out) {
+                        direct_url = u;
+                    }
+                }
+            }
+
+            if direct_url.is_empty() && !clean.is_empty() && !clean_art.is_empty() {
+                let query = format!("scsearch5:{}", clean);
+                let mut alt_cmd = Command::new(&yt_cmd);
+                apply_yt_dlp_common_args_no_cookies(&mut alt_cmd);
+                alt_cmd.args(["--no-playlist", "--ignore-errors", "-g", "-f", "bestaudio/b", "--", &query]);
                 if let Ok(Ok(alt_out)) = tokio::time::timeout(Duration::from_secs(5), alt_cmd.output()).await {
                     if let Some(u) = extract_stream_url_from_output(&alt_out) {
                         direct_url = u;
@@ -216,12 +253,14 @@ pub async fn stream_audio(
         apply_yt_dlp_common_args(&mut cmd_fast);
         cmd_fast.args([
             "--no-playlist",
+            "--ignore-errors",
             "-g",
             "-f", "bestaudio/ba/b",
+            "--extractor-args", "youtube:player_client=ios,web,mweb",
             "--",
             &target,
         ]);
-        if let Ok(Ok(out)) = tokio::time::timeout(Duration::from_millis(3500), cmd_fast.output()).await {
+        if let Ok(Ok(out)) = tokio::time::timeout(Duration::from_millis(3000), cmd_fast.output()).await {
             if let Some(u) = extract_stream_url_from_output(&out) {
                 direct_url = u;
             }
@@ -253,53 +292,36 @@ pub async fn stream_audio(
             }
         }
 
+        // Fast & reliable SoundCloud fallback search for YouTube tracks
         if direct_url.is_empty() && !resolved_title.is_empty() {
             let clean_title = clean_music_title(&resolved_title);
-            let clean_uploader = resolved_uploader.replace(" - Topic", "").trim().to_string();
+            let clean_uploader = clean_music_title(&resolved_uploader);
             let sc_query = if !clean_uploader.is_empty() && !clean_title.to_lowercase().contains(&clean_uploader.to_lowercase()) {
-                format!("scsearch2:{} {}", clean_title, clean_uploader)
+                format!("scsearch5:{} {}", clean_title, clean_uploader)
             } else {
-                format!("scsearch2:{}", clean_title)
+                format!("scsearch5:{}", clean_title)
             };
 
             let mut sc_fallback = Command::new(&yt_cmd);
             apply_yt_dlp_common_args_no_cookies(&mut sc_fallback);
-            sc_fallback.args(["--no-playlist", "-g", "-f", "bestaudio/b", "--", &sc_query]);
+            sc_fallback.args(["--no-playlist", "--ignore-errors", "-g", "-f", "bestaudio/b", "--", &sc_query]);
 
-            if let Ok(Ok(sc)) = tokio::time::timeout(Duration::from_secs(5), sc_fallback.output()).await {
+            if let Ok(Ok(sc)) = tokio::time::timeout(Duration::from_secs(6), sc_fallback.output()).await {
                 if let Some(u) = extract_stream_url_from_output(&sc) {
                     direct_url = u;
                 }
             }
 
             if direct_url.is_empty() && !clean_uploader.is_empty() {
-                let sc_title_query = format!("scsearch2:{}", clean_title);
+                let sc_title_query = format!("scsearch5:{}", clean_title);
                 let mut sc_title_fb = Command::new(&yt_cmd);
                 apply_yt_dlp_common_args_no_cookies(&mut sc_title_fb);
-                sc_title_fb.args(["--no-playlist", "-g", "-f", "bestaudio/b", "--", &sc_title_query]);
+                sc_title_fb.args(["--no-playlist", "--ignore-errors", "-g", "-f", "bestaudio/b", "--", &sc_title_query]);
 
-                if let Ok(Ok(sc)) = tokio::time::timeout(Duration::from_secs(4), sc_title_fb.output()).await {
+                if let Ok(Ok(sc)) = tokio::time::timeout(Duration::from_secs(5), sc_title_fb.output()).await {
                     if let Some(u) = extract_stream_url_from_output(&sc) {
                         direct_url = u;
                     }
-                }
-            }
-        }
-
-        if direct_url.is_empty() {
-            let mut cmd_android = Command::new(&yt_cmd);
-            apply_yt_dlp_common_args_no_cookies(&mut cmd_android);
-            cmd_android.args([
-                "--no-playlist",
-                "-g",
-                "-f", "bestaudio/ba/b",
-                "--extractor-args", "youtube:player_client=android",
-                "--",
-                &target,
-            ]);
-            if let Ok(Ok(out)) = tokio::time::timeout(Duration::from_secs(4), cmd_android.output()).await {
-                if let Some(u) = extract_stream_url_from_output(&out) {
-                    direct_url = u;
                 }
             }
         }
@@ -318,7 +340,13 @@ pub async fn stream_audio(
             };
 
             if let Some(v) = vid {
-                let instances = ["https://inv.nadeko.net", "https://invidious.nerdvpn.de", "https://vid.priv.au"];
+                let instances = [
+                    "https://inv.nadeko.net",
+                    "https://invidious.nerdvpn.de",
+                    "https://vid.priv.au",
+                    "https://invidious.private.coffee",
+                    "https://yt.drgnz.club"
+                ];
                 if let Ok(client) = reqwest::Client::builder().timeout(Duration::from_secs(2)).build() {
                     for inst in instances {
                         let inv_url = format!("{}/api/v1/videos/{}", inst, v);

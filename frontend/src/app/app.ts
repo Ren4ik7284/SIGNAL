@@ -621,12 +621,6 @@ export class App implements OnInit {
       return;
     }
 
-    const localCandidates = this.recService.getAllLocalCandidates();
-    if (localCandidates.length === 0) {
-      this.isQuickStartMixModalOpen.set(true);
-      return;
-    }
-
     this.showToast('Запуск Моей Волны...');
     const ok = await this.audioService.startSmartMix(mood);
     if (!ok) {

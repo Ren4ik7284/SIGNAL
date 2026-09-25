@@ -41,6 +41,8 @@ export class AudioService {
   private isFadingOut = false;
   private hasRecordedCompletion = false;
   private isReplenishingQueue = false;
+  private consecutiveErrorCount = 0;
+  private errorTimeoutId: any = null;
 
   readonly progressPercent = computed(() => {
     const d = this.duration();
@@ -293,6 +295,7 @@ export class AudioService {
     });
 
     this.audio.addEventListener('playing', () => {
+      this.consecutiveErrorCount = 0;
       this.isPlaying.set(true);
       this.updateMediaSessionPlaybackState('playing');
       const cur = this.currentTrack();
@@ -318,10 +321,31 @@ export class AudioService {
       this.handleTrackEnded();
     });
 
-    this.audio.addEventListener('error', () => {
-      this.isPlaying.set(false);
-      this.updateMediaSessionPlaybackState('none');
+    this.audio.addEventListener('error', (e) => {
+      console.warn('[AudioService] Audio element error:', e);
+      this.handlePlaybackFailure('native_error');
     });
+  }
+
+  private handlePlaybackFailure(source: string) {
+    this.isPlaying.set(false);
+    this.updateMediaSessionPlaybackState('paused');
+
+    if (this.recService.isMixActive()) {
+      this.consecutiveErrorCount++;
+      if (this.consecutiveErrorCount <= 4) {
+        const cur = this.currentTrack();
+        if (cur) {
+          this.recService.dislikeTrack(cur.id);
+        }
+        if (this.errorTimeoutId) clearTimeout(this.errorTimeoutId);
+        this.errorTimeoutId = setTimeout(() => {
+          this.next();
+        }, 600);
+        return;
+      }
+    }
+    this.consecutiveErrorCount = 0;
   }
 
   private setupMediaSession() {
@@ -536,8 +560,7 @@ export class AudioService {
       })
       .catch((err) => {
         console.warn('[AudioService] play() error:', err);
-        this.isPlaying.set(false);
-        this.updateMediaSessionPlaybackState('paused');
+        this.handlePlaybackFailure('play_rejection');
       });
   }
 

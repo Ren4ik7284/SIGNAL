@@ -78,9 +78,33 @@ pub async fn search_music(
     let mut combined = Vec::new();
     let mut seen_ids = HashSet::new();
 
-    for t in yt_res {
-        if seen_ids.insert(t.id.clone()) {
-            combined.push(t);
+    let is_valid_duration = |duration: f64| -> bool {
+        duration == 0.0 || (duration >= 30.0 && duration <= 600.0)
+    };
+
+    let sc_filtered: Vec<SearchTrack> = sc_res
+        .into_iter()
+        .filter(|t| is_valid_duration(t.duration))
+        .collect();
+
+    let yt_filtered: Vec<SearchTrack> = yt_res
+        .into_iter()
+        .filter(|t| is_valid_duration(t.duration))
+        .collect();
+
+    let max_len = sc_filtered.len().max(yt_filtered.len());
+    for i in 0..max_len {
+        if i < sc_filtered.len() {
+            let t = &sc_filtered[i];
+            if seen_ids.insert(t.id.clone()) {
+                combined.push(t.clone());
+            }
+        }
+        if i < yt_filtered.len() {
+            let t = &yt_filtered[i];
+            if seen_ids.insert(t.id.clone()) {
+                combined.push(t.clone());
+            }
         }
     }
 
@@ -90,12 +114,6 @@ pub async fn search_music(
             if seen_ids.insert(t.id.clone()) {
                 combined.push(t);
             }
-        }
-    }
-
-    for t in sc_res {
-        if seen_ids.insert(t.id.clone()) {
-            combined.push(t);
         }
     }
 

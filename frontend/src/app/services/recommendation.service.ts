@@ -412,7 +412,7 @@ export class RecommendationService {
    */
   async fetchOnlineDiscoveryTracks(count = 3, excludeIds: Set<string> = new Set()): Promise<Track[]> {
     if (this.isFetchingDiscovery()) return [];
-    if (this.libraryService.mixConfig().source === 'library_only') return [];
+    if (this.libraryService.mixConfig().source === 'library_only' && this.getAllLocalCandidates().length > 0) return [];
     this.isFetchingDiscovery.set(true);
 
     try {
@@ -423,44 +423,50 @@ export class RecommendationService {
 
       if (lang === 'ru') {
         if (mood === 'energetic') {
-          const ruEnergetic = ['русский фонк хиты', 'русский рэп новинки', 'русский рок драйв', 'русский дрилл'];
+          const ruEnergetic = ['Big Baby Tape', 'OG Buda', 'Kizaru', 'PHARAOH', 'русский дрилл', 'русский фонк'];
           query = ruEnergetic[Math.floor(Math.random() * ruEnergetic.length)];
         } else if (mood === 'chill') {
-          const ruChill = ['русский инди чилл', 'русский лоуфай', 'русская меланхолия', 'акустика русский рок'];
+          const ruChill = ['Miyagi', 'Saluki', 'ANIKV', 'русский лоуфай', 'Zoloto', 'The Limba'];
           query = ruChill[Math.floor(Math.random() * ruChill.length)];
         } else {
-          const ruGeneral = ['русские хиты 2024', 'популярная русская музыка', 'лучшие русские треки'];
+          const ruGeneral = ['Miyagi', 'OG Buda', 'Big Baby Tape', 'Saluki', 'Kizaru', 'Markul', 'Scriptonite', 'Instasamka'];
           query = ruGeneral[Math.floor(Math.random() * ruGeneral.length)];
         }
       } else if (lang === 'en') {
         if (mood === 'energetic') {
-          const enEnergetic = ['phonk workout mix', 'electronic synthwave mix', 'rock hits 2024', 'trap bass mix'];
+          const enEnergetic = ['The Weeknd', 'Travis Scott', 'Metro Boomin', 'phonk', 'electronic synthwave', 'rock hits'];
           query = enEnergetic[Math.floor(Math.random() * enEnergetic.length)];
         } else if (mood === 'chill') {
-          const enChill = ['lofi chill hip hop', 'acoustic chill music', 'relaxing ambient lounge', 'chill vocal hits'];
+          const enChill = ['lofi hip hop beats', 'Billie Eilish', 'Joji', 'chill rnb', 'acoustic chill'];
           query = enChill[Math.floor(Math.random() * enChill.length)];
         } else {
-          query = 'popular hits mix 2024';
+          const enGeneral = ['The Weeknd', 'Dua Lipa', 'Post Malone', 'Drake', 'Kendrick Lamar', 'Metro Boomin'];
+          query = enGeneral[Math.floor(Math.random() * enGeneral.length)];
         }
       } else {
         if (mood === 'energetic') {
-          const energeticQueries = ['phonk workout mix', 'electronic synthwave mix', 'rock hits 2024', 'trap bass mix'];
+          const energeticQueries = ['phonk', 'Big Baby Tape', 'Travis Scott', 'synthwave'];
           query = energeticQueries[Math.floor(Math.random() * energeticQueries.length)];
         } else if (mood === 'chill') {
-          const chillQueries = ['lofi chill hip hop', 'acoustic chill music', 'relaxing ambient lounge', 'chill vocal hits'];
+          const chillQueries = ['lofi chill beats', 'Miyagi', 'acoustic chill', 'Billie Eilish'];
           query = chillQueries[Math.floor(Math.random() * chillQueries.length)];
         } else {
           if (candidates.length > 0) {
             const randomTrack = candidates[Math.floor(Math.random() * candidates.length)];
-            query = `${randomTrack.artist} similar music`;
+            query = `${randomTrack.artist}`;
           } else {
-            query = 'popular hits mix 2024';
+            const generalQueries = ['Miyagi', 'The Weeknd', 'OG Buda', 'Post Malone', 'Saluki', 'Dua Lipa'];
+            query = generalQueries[Math.floor(Math.random() * generalQueries.length)];
           }
         }
       }
 
       const results = await this.libraryService.searchOnline(query);
-      const filtered = results.filter((t) => !excludeIds.has(t.id) && !this.isDisliked(t.id));
+      const filtered = results.filter((t) => 
+        !excludeIds.has(t.id) && 
+        !this.isDisliked(t.id) &&
+        (t.duration === 0 || (t.duration >= 45 && t.duration <= 600))
+      );
 
       return filtered.slice(0, count);
     } catch {
